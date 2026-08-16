@@ -31,8 +31,8 @@
       </ul>
     </div>
 
-    <div class="ml-auto w-68 flex gap-4 *:grow *:shrink-0 *:max-w-1/2 justify-between items-center">
-      <Button loading={isRefreshing} onclick={refresh}>
+    <div class="ml-auto max-w-70 flex gap-4 justify-between items-center">
+      <Button loading={isRefreshing} loadingText="Refreshing" onclick={refresh}>
         <RotateCw />
         Refresh
       </Button>

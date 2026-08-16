@@ -5,7 +5,7 @@
   import Spinner from '../spinner/spinner.svelte';
 
   export const buttonVariants = cva(
-    "rounded-md border border-transparent bg-clip-padding text-sm font-medium flex justify-center items-center active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "rounded-md border border-transparent bg-clip-padding text-sm font-medium flex justify-center items-center gap-2 whitespace-nowrap active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
     {
       variants: {
         variant: {
@@ -24,7 +24,7 @@
 
   type ButtonProps = HTMLButtonAttributes &
     HTMLAnchorAttributes &
-    VariantProps<typeof buttonVariants> & { loading?: boolean };
+    VariantProps<typeof buttonVariants> & { loading?: boolean; loadingText?: string };
 </script>
 
 <script lang="ts">
@@ -34,6 +34,7 @@
     href = undefined,
     type = 'button',
     loading = false,
+    loadingText = '',
     disabled,
     children,
     class: className,
@@ -61,13 +62,10 @@
     {...restProps}
   >
     {#if loading}
-      <span aria-hidden="true" class="">
-        <Spinner />
-      </span>
+      <Spinner />
+      {loadingText}
     {:else}
-      <span class="inline-flex gap-2 shrink-0 items-center justify-center whitespace-nowrap">
-        {@render children?.()}
-      </span>
+      {@render children?.()}
     {/if}
   </button>
 {/if}
