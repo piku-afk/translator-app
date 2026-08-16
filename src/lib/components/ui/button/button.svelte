@@ -5,14 +5,14 @@
   import Spinner from '../spinner/spinner.svelte';
 
   export const buttonVariants = cva(
-    "rounded-md border border-transparent bg-clip-padding text-sm font-medium relative active:not-aria-[haspopup]:translate-y-px  [&_svg:not([class*='size-'])]:size-4 transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    "rounded-md border border-transparent bg-clip-padding text-sm font-medium flex justify-center items-center active:not-aria-[haspopup]:translate-y-px [&_svg:not([class*='size-'])]:size-4 transition-all outline-none select-none disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
     {
       variants: {
         variant: {
           default: 'border border-gray-300 bg-white hover:bg-gray-100',
         },
         size: {
-          default: 'py-1.25 px-3 text-sm',
+          default: 'py-1.5 px-3 text-sm',
         },
       },
       defaultVariants: {
