@@ -1,11 +1,21 @@
 <script lang="ts">
+  import RotateCw from '@lucide/svelte/icons/rotate-cw';
   import '@fontsource-variable/geist/wght.css';
-
+  import { invalidateAll } from '$app/navigation';
   import favicon from '$lib/assets/favicon.svg';
   import CreditsBadge from '$lib/components/credits-badge/credits-badge.svelte';
+  import Button from '$lib/components/ui/button/button.svelte';
+  import { getErrorMessage } from '$lib/utils';
   import '../app.css';
 
   let { children, data } = $props();
+  let isRefreshing = $state(false);
+
+  async function refresh() {
+    isRefreshing = true;
+    await invalidateAll();
+    isRefreshing = false;
+  }
 </script>
 
 <svelte:head>
@@ -29,13 +39,18 @@
       </ul>
     </div>
 
-    <div class="ml-auto">
+    <div class="ml-auto flex gap-4">
+      <Button loading={isRefreshing} onclick={refresh}>
+        <RotateCw />
+        Refresh
+      </Button>
+
       {#await data.credits}
         <CreditsBadge loading={true} />
       {:then credits}
         <CreditsBadge credits={credits.balance} />
       {:catch error}
-        <CreditsBadge error="something went wrong" />
+        <CreditsBadge error={getErrorMessage(error)} />
       {/await}
     </div>
   </nav>

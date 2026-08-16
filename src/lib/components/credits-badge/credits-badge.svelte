@@ -6,21 +6,19 @@
   type Props = { loading: true } | { credits: string } | { error: string };
 
   let props: Props = $props();
+  const isDestructive = $derived('error' in props);
+  const formattedCredits = $derived(
+    'credits' in props ? `${Number(props.credits).toFixed(2)}` : '0',
+  );
 </script>
 
-{#if 'loading' in props}
-  <Badge>
-    <Coins class="size-4" />
+<Badge color={isDestructive ? 'destructive' : undefined}>
+  <Coins />
+  {#if 'loading' in props}
     <Skeleton class="h-5 w-20" />
-  </Badge>
-{:else if 'error' in props}
-  <Badge color="destructive">
-    <Coins class="size-4" />
+  {:else if 'error' in props}
     {props.error}
-  </Badge>
-{:else}
-  <Badge>
-    <Coins class="size-4" />
-    {Number(props.credits).toFixed(2)} credits
-  </Badge>
-{/if}
+  {:else}
+    {formattedCredits} Credits
+  {/if}
+</Badge>
