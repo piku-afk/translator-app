@@ -6,4 +6,8 @@
   let { class: className, ...restProps }: SvelteHTMLElements['div'] = $props();
 </script>
 
-<div class={cn('rounded-md bg-gray-100 animate-pulse', className)} {...restProps}></div>
+<div
+  aria-hidden="true"
+  class={cn('rounded-md bg-gray-300 animate-pulse', className)}
+  {...restProps}
+></div>

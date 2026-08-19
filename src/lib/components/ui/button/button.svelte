@@ -10,6 +10,8 @@
       variants: {
         variant: {
           default: 'border border-gray-300 bg-white hover:bg-gray-100',
+          destructive:
+            'border border-destructive bg-destructive/5 text-destructive hover:bg-destructive/10 focus-visible:border-destructive/40 focus-visible:ring-destructive/20',
         },
         size: {
           default: 'py-1.5 px-3 text-sm',

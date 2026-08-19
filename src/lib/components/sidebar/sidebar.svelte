@@ -18,7 +18,7 @@
 </script>
 
 <aside
-  class="fixed top-16.75 right-0 w-70 h-[calc(100vh-4.1875rem)] border-l border-gray-300 py-4 flex flex-col gap-4"
+  class="fixed z-9 top-16.75 right-0 w-70 h-[calc(100vh-4.1875rem)] border-l border-gray-300 py-4 flex flex-col gap-4"
 >
   <header class="px-5">
     <h2 class="text-lg font-medium">Home</h2>

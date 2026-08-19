@@ -14,7 +14,7 @@
   const { credits, isRefreshing, refresh }: HeaderProps = $props();
 </script>
 
-<header class="fixed top-0 left-0 bg-gray-100 border-b border-gray-300 py-4 px-6 w-full">
+<header class="fixed z-10 top-0 left-0 bg-gray-100 border-b border-gray-300 py-4 px-6 w-full">
   <nav aria-label="main navigation" class="flex items-baseline">
     <div class="flex items-baseline gap-6">
       <a href="/" class="text-2xl font-normal leading-none"> Translator</a>
