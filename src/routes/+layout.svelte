@@ -7,20 +7,13 @@
   import '../app.css';
 
   let { children, data } = $props();
-  let isRefreshing = $state(false);
-
-  async function refresh() {
-    isRefreshing = true;
-    await invalidateAll();
-    isRefreshing = false;
-  }
 </script>
 
 <svelte:head>
   <link rel="icon" href={favicon} />
 </svelte:head>
 
-<Header credits={data.credits} {isRefreshing} {refresh} />
+<Header credits={data.credits} />
 <main class="mt-16.75 mr-70 p-6 flex flex-col gap-4">
   {@render children()}
 </main>

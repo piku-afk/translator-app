@@ -7,11 +7,9 @@
 
   interface HeaderProps {
     credits: ReturnType<(typeof gateway)['getCredits']>;
-    isRefreshing: boolean;
-    refresh: () => Promise<void>;
   }
 
-  const { credits, isRefreshing, refresh }: HeaderProps = $props();
+  const { credits }: HeaderProps = $props();
 </script>
 
 <header class="fixed z-10 top-0 left-0 bg-gray-100 border-b border-gray-300 py-4 px-6 w-full">
@@ -32,11 +30,6 @@
     </div>
 
     <div class="ml-auto max-w-70 flex gap-4 justify-between items-center">
-      <Button loading={isRefreshing} loadingText="Refreshing" onclick={refresh}>
-        <RotateCw />
-        Refresh
-      </Button>
-
       {#await credits}
         <CreditsBadge loading={true} />
       {:then credits}
