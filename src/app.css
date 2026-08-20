@@ -1,4 +1,4 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -123,5 +123,5 @@
 }
 
 body {
-  font-family: 'Geist Variable', sans-serif;
+  font-family: "Geist Variable", sans-serif;
 }
