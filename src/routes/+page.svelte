@@ -43,7 +43,7 @@
   }
 </script>
 
-<main class="max-w-5xl w-full mx-auto py-6 flex flex-col gap-10">
+<main class="w-full py-6 flex flex-col gap-10">
   <!-- Greeting -->
   <Greeting name="Alex" />
 

@@ -12,21 +12,10 @@
   const { credits }: HeaderProps = $props();
 </script>
 
-<header class="fixed z-10 top-0 left-0 bg-gray-100 border-b border-gray-300 py-4 px-6 w-full">
-  <nav aria-label="main navigation" class="flex items-baseline">
+<header class="fixed z-10 top-0 left-0 bg-gray-100 border-b border-gray-300 py-4 w-full">
+  <nav aria-label="main navigation" class="mx-auto px-6 max-w-5xl flex items-baseline">
     <div class="flex items-baseline gap-6">
       <a href="/" class="text-2xl font-normal leading-none"> Translator</a>
-
-      <ul class="flex items-baseline">
-        <li>
-          <a
-            href="/projects"
-            class="text-lg font-light leading-none text-gray-500 hover:text-black"
-          >
-            Projects</a
-          >
-        </li>
-      </ul>
     </div>
 
     <div class="ml-auto max-w-70 flex gap-4 justify-between items-center">
