@@ -1,15 +1,14 @@
-import { createServerFn } from '@tanstack/react-start';
-import { createGateway } from 'ai';
+import { createServerFn } from "@tanstack/react-start";
+import { createGateway } from "ai";
 
-const API_KEY =
-  process.env.AI_GATEWAY_API_KEY ??
-  (import.meta as unknown as { env?: Record<string, string> }).env
-    ?.AI_GATEWAY_API_KEY ??
-  (import.meta as unknown as { env?: Record<string, string> }).env
-    ?.VITE_AI_GATEWAY_API_KEY;
+export const creditsQueryKey = ["credits"] as const;
 
-export const getCredits = createServerFn({ method: 'GET' }).handler(async () => {
-  const gateway = createGateway({ apiKey: API_KEY });
+const getCredits = createServerFn().handler(async () => {
+  const gateway = createGateway();
   const credits = await gateway.getCredits();
   return credits.balance;
 });
+
+export function getCreditsQueryOptions() {
+  return { queryFn: getCredits, queryKey: creditsQueryKey };
+}

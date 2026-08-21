@@ -1,52 +1,85 @@
-import { HeadContent, Outlet, Scripts, createRootRoute } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
-import '@fontsource-variable/geist/wght.css'
-import { Header } from '../components/header'
+import "@fontsource-variable/geist/wght.css";
+import {
+  AppShell,
+  ColorSchemeScript,
+  Container,
+  MantineProvider,
+  mantineHtmlProps,
+} from "@mantine/core";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+import { Header } from "#/components/header";
+import { getCreditsQueryOptions } from "#/lib/credits";
 
-import appCss from '../styles.css?url'
-import favicon from '../assets/favicon.svg'
+import "@mantine/core/styles.layer.css";
+import appCss from "../styles.css?url";
+import favicon from "../assets/favicon.svg";
+import { theme } from "#/lib/mantine-theme";
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
     meta: [
-      {
-        charSet: 'utf-8',
-      },
-      {
-        name: 'viewport',
-        content: 'width=device-width, initial-scale=1',
-      },
-      { title: 'Translator App' },
+      { charSet: "utf-8" },
+      { title: "Translator App" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
     ],
     links: [
-      { rel: 'stylesheet', href: appCss },
-      { rel: 'icon', href: favicon },
+      { rel: "icon", href: favicon },
+      { rel: "stylesheet", href: appCss },
+    ],
+    scripts: [
+      {
+        children: `
+          (function () {
+            try {
+              var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+              if (tz && !document.cookie.match(/(^|;) *tz=([^;]*)/)) {
+                document.cookie =
+                  "tz=" + encodeURIComponent(tz) +
+                  "; path=/; max-age=31536000; SameSite=Lax";
+              }
+            } catch (e) {}
+          })();
+        `,
+      },
     ],
   }),
-  component: RootComponent,
-})
-
-function RootComponent() {
-  return (
-    <RootDocument>
-      <Outlet />
-    </RootDocument>
-  )
-}
+  loader: ({ context }) => {
+    context.queryClient.prefetchQuery(getCreditsQueryOptions());
+  },
+  component: function RootComponent() {
+    const { queryClient } = Route.useRouteContext();
+    return (
+      <QueryClientProvider client={queryClient}>
+        <RootDocument>
+          <Outlet />
+        </RootDocument>
+      </QueryClientProvider>
+    );
+  },
+});
 
 function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" {...mantineHtmlProps}>
       <head>
+        <ColorSchemeScript />
         <HeadContent />
       </head>
-      <body className="bg-gray-100">
-        <Header />
-        <main className="mt-[4.1875rem] mx-auto p-6 max-w-5xl flex flex-col gap-4">
-          {children}
-        </main>
+      <body>
+        <MantineProvider theme={theme}>
+          <AppShell header={{ height: 60 }} padding="md">
+            <Header />
+            <AppShell.Main>
+              <Container strategy="grid" className="py-6">
+                {children}
+              </Container>
+            </AppShell.Main>
+          </AppShell>
+        </MantineProvider>
         <Scripts />
       </body>
     </html>
-  )
+  );
 }

@@ -1,29 +1,43 @@
-import { Coins } from 'lucide-react';
-import { Badge } from './ui/badge';
-import { Skeleton } from './ui/skeleton';
+import { Badge, Skeleton, Tooltip } from "@mantine/core";
+import { useQuery } from "@tanstack/react-query";
+import { Coins } from "lucide-react";
+import { getCreditsQueryOptions } from "#/lib/credits";
+import { getErrorMessage } from "#/lib/utils";
 
-type CreditsProps =
-  | { status: 'loading' }
-  | { status: 'error'; error: string }
-  | { status: 'success'; credits: string };
+const badgeId = "remaining-credits";
+const badgeErrorMessage = "Failed to load credits";
 
-export function CreditsBadge(props: CreditsProps) {
-  const isDestructive = props.status === 'error';
-  const formattedCredits =
-    props.status === 'success'
-      ? `${Number(props.credits).toFixed(2)}`
-      : '0';
+export function CreditsBadge() {
+  const credits = useQuery(getCreditsQueryOptions());
 
   return (
-    <Badge color={isDestructive ? 'destructive' : undefined}>
-      <Coins />
-      {props.status === 'loading' ? (
-        <Skeleton className="h-5 w-20" />
-      ) : props.status === 'error' ? (
-        props.error
-      ) : (
-        `${formattedCredits} Credits`
+    <>
+      <Badge
+        size="xl"
+        id={badgeId}
+        variant={credits.error ? "outline" : "default"}
+        color={credits.error ? "red" : undefined}
+        leftSection={<Coins className="size-4" />}
+        className="rounded-md font-medium text-sm normal-case gap-2 select-none"
+      >
+        {credits.isPending ? (
+          <Skeleton className="w-16 h-5" />
+        ) : credits.error ? (
+          badgeErrorMessage
+        ) : (
+          `${Number(credits.data).toFixed(2)}`
+        )}
+      </Badge>
+      {credits.error && (
+        <Tooltip
+          multiline
+          withArrow
+          interactive
+          className="w-60"
+          target={`#${badgeId}`}
+          label={getErrorMessage(credits.error)}
+        />
       )}
-    </Badge>
+    </>
   );
 }

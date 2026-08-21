@@ -1,5 +1,5 @@
-import { getErrorMessage } from '#/lib/utils';
-import { Button } from './ui/button';
+import { getErrorMessage } from "#/lib/utils";
+import { Button } from "./ui/button";
 
 export function ErrorFallback({
   componentName,
