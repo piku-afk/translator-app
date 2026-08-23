@@ -7,6 +7,8 @@ import {
   mantineHtmlProps,
 } from "@mantine/core";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { Header } from "#/components/header";
@@ -55,6 +57,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         <RootDocument>
           <Outlet />
         </RootDocument>
+        <ReactQueryDevtools />
+        <TanStackRouterDevtools />
       </QueryClientProvider>
     );
   },

@@ -16,13 +16,6 @@ function getSubtext(): string {
   return "Continue where you left off";
 }
 
-export function getTimezone(): string | undefined {
-  if (typeof window === "undefined") {
-    return getCookie("tz") || undefined;
-  }
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
 const getGreetingData = createServerFn()
   .validator((data: { currentTime: string; timezone?: string }) => data)
   .handler(({ data }) => {

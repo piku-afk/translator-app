@@ -1,7 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "translator",
-  "compatibility_date": "2025-09-02",
+  "compatibility_date": "2026-08-15",
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
+  "secrets": {
+    "required": ["AI_GATEWAY_API_KEY"],
+  },
 }

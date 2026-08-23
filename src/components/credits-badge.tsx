@@ -25,7 +25,7 @@ export function CreditsBadge() {
         ) : credits.error ? (
           badgeErrorMessage
         ) : (
-          `${Number(credits.data).toFixed(2)}`
+          `${Number(credits?.data?.balance ?? "0").toFixed(2)} credits`
         )}
       </Badge>
       {credits.error && (
