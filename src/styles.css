@@ -1,0 +1,10 @@
+@layer theme, base, mantine, components, utilities;
+@import "tailwindcss";
+
+:root {
+  --mantine-color-body: #fafafa;
+}
+
+body {
+  font-family: "Geist Variable", sans-serif;
+}

@@ -1,3 +1,12 @@
 allowBuilds:
   esbuild: true
   workerd: true
+minimumReleaseAgeExclude:
+  - "@tanstack/devtools-bundler-core@0.1.3"
+  - "@tanstack/devtools-event-bus@0.4.3"
+  - "@tanstack/devtools-ui@0.7.1"
+  - "@tanstack/devtools-vite@0.8.5"
+  - "@tanstack/devtools@0.14.2"
+  - "@tanstack/react-devtools@0.10.12"
+  - "@vitejs/plugin-react@6.1.0"
+  - vite@8.2.2
