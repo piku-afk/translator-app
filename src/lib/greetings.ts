@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie } from "@tanstack/react-start/server";
+import { requireAuth } from "#/lib/auth/session.server";
 
 export interface GreetingData {
   greeting: string;
@@ -18,7 +19,8 @@ function getSubtext(): string {
 
 const getGreetingData = createServerFn()
   .validator((data: { currentTime: string; timezone?: string }) => data)
-  .handler(({ data }) => {
+  .handler(async ({ data }) => {
+    await requireAuth();
     const hour = Number(
       new Intl.DateTimeFormat("en-US", {
         hour12: false,
