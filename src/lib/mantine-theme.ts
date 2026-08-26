@@ -15,6 +15,7 @@ const colors: MantineColorsTuple = [
 
 export const theme = createTheme({
   colors: { myColor: colors },
+  defaultRadius: "6px",
   fontFamily: "Geist Variable, sans-serif",
   headings: { fontFamily: "Geist Variable, sans-serif" },
   primaryColor: "myColor",

@@ -5,6 +5,11 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "@tanstack/react-start/server-entry",
   "secrets": {
-    "required": ["AI_GATEWAY_API_KEY"],
+    "required": [
+      "AI_GATEWAY_API_KEY",
+      "AUTH_PASSWORD_HASH",
+      "AUTH_SESSION_SECRET",
+      "SESSION_MAX_AGE_SECONDS",
+    ],
   },
 }

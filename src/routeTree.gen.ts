@@ -8,88 +8,142 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from "./routes/__root";
-import { Route as IndexRouteImport } from "./routes/index";
-import { Route as ApiActivityRouteImport } from "./routes/api/activity";
-import { Route as ApiNovelsRouteImport } from "./routes/api/novels";
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as AppRouteRouteImport } from './routes/_app/route'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AppIndexRouteImport } from './routes/_app/index'
+import { Route as ApiActivityRouteImport } from './routes/api/activity'
+import { Route as ApiNovelsRouteImport } from './routes/api/novels'
 
-const IndexRoute = IndexRouteImport.update({
-  id: "/",
-  path: "/",
+const AppRouteRoute = AppRouteRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRouteRoute,
+} as any)
 const ApiActivityRoute = ApiActivityRouteImport.update({
-  id: "/api/activity",
-  path: "/api/activity",
+  id: '/api/activity',
+  path: '/api/activity',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 const ApiNovelsRoute = ApiNovelsRouteImport.update({
-  id: "/api/novels",
-  path: "/api/novels",
+  id: '/api/novels',
+  path: '/api/novels',
   getParentRoute: () => rootRouteImport,
-} as any);
+} as any)
 
 export interface FileRoutesByFullPath {
-  "/": typeof IndexRoute;
-  "/api/activity": typeof ApiActivityRoute;
-  "/api/novels": typeof ApiNovelsRoute;
+  '/': typeof AppIndexRoute
+  '/login': typeof LoginRoute
+  '/api/activity': typeof ApiActivityRoute
+  '/api/novels': typeof ApiNovelsRoute
 }
 export interface FileRoutesByTo {
-  "/": typeof IndexRoute;
-  "/api/activity": typeof ApiActivityRoute;
-  "/api/novels": typeof ApiNovelsRoute;
+  '/login': typeof LoginRoute
+  '/api/activity': typeof ApiActivityRoute
+  '/api/novels': typeof ApiNovelsRoute
+  '/': typeof AppIndexRoute
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport;
-  "/": typeof IndexRoute;
-  "/api/activity": typeof ApiActivityRoute;
-  "/api/novels": typeof ApiNovelsRoute;
+  __root__: typeof rootRouteImport
+  '/_app': typeof AppRouteRouteWithChildren
+  '/login': typeof LoginRoute
+  '/api/activity': typeof ApiActivityRoute
+  '/api/novels': typeof ApiNovelsRoute
+  '/_app/': typeof AppIndexRoute
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath;
-  fullPaths: "/" | "/api/activity" | "/api/novels";
-  fileRoutesByTo: FileRoutesByTo;
-  to: "/" | "/api/activity" | "/api/novels";
-  id: "__root__" | "/" | "/api/activity" | "/api/novels";
-  fileRoutesById: FileRoutesById;
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths: '/' | '/login' | '/api/activity' | '/api/novels'
+  fileRoutesByTo: FileRoutesByTo
+  to: '/login' | '/api/activity' | '/api/novels' | '/'
+  id:
+    '__root__' | '/_app' | '/login' | '/api/activity' | '/api/novels' | '/_app/'
+  fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute;
-  ApiActivityRoute: typeof ApiActivityRoute;
-  ApiNovelsRoute: typeof ApiNovelsRoute;
+  AppRouteRoute: typeof AppRouteRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  ApiActivityRoute: typeof ApiActivityRoute
+  ApiNovelsRoute: typeof ApiNovelsRoute
 }
 
-declare module "@tanstack/react-router" {
+declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    "/": {
-      id: "/";
-      path: "/";
-      fullPath: "/";
-      preLoaderRoute: typeof IndexRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/api/activity": {
-      id: "/api/activity";
-      path: "/api/activity";
-      fullPath: "/api/activity";
-      preLoaderRoute: typeof ApiActivityRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
-    "/api/novels": {
-      id: "/api/novels";
-      path: "/api/novels";
-      fullPath: "/api/novels";
-      preLoaderRoute: typeof ApiNovelsRouteImport;
-      parentRoute: typeof rootRouteImport;
-    };
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/': {
+      id: '/_app/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/api/activity': {
+      id: '/api/activity'
+      path: '/api/activity'
+      fullPath: '/api/activity'
+      preLoaderRoute: typeof ApiActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/novels': {
+      id: '/api/novels'
+      path: '/api/novels'
+      fullPath: '/api/novels'
+      preLoaderRoute: typeof ApiNovelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AppRouteRouteChildren {
+  AppIndexRoute: typeof AppIndexRoute
+}
+
+const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppIndexRoute: AppIndexRoute,
+}
+
+const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
+  AppRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AppRouteRoute: AppRouteRouteWithChildren,
+  LoginRoute: LoginRoute,
   ApiActivityRoute: ApiActivityRoute,
   ApiNovelsRoute: ApiNovelsRoute,
-};
+}
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>();
+  ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
