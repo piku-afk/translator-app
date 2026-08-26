@@ -17,8 +17,8 @@ export const Route = createFileRoute("/login")({
     const navigate = Route.useNavigate();
     const loginMutation = useMutation({
       mutationFn: login,
-      onSuccess: () => {
-        navigate({ to: "/" });
+      onSuccess: async () => {
+        await navigate({ to: "/" });
       },
     });
 

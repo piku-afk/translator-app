@@ -33,14 +33,14 @@ export function Header() {
             Translator
           </Anchor>
 
-          <Group gap="sm">
+          <Group className="gap-4">
             <CreditsBadge />
 
             <Tooltip label="Log out">
               <ActionIcon
                 size="md"
                 variant="default"
-                className="[&_svg]:size-4"
+                className="w-8 h-8 [&_svg]:size-4"
                 loading={signingOut}
                 onClick={handleSignOut}
               >

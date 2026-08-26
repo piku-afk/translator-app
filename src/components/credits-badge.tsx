@@ -4,17 +4,21 @@ import { Coins } from "lucide-react";
 import { getCreditsQueryOptions } from "#/lib/credits";
 import { getErrorMessage } from "#/lib/utils";
 
-const badgeId = "remaining-credits";
 const badgeErrorMessage = "Failed to load credits";
 
 export function CreditsBadge() {
   const credits = useQuery(getCreditsQueryOptions());
 
   return (
-    <>
+    <Tooltip
+      multiline
+      withArrow
+      interactive
+      classNames={{ tooltip: "max-w-60" }}
+      label={credits.error ? getErrorMessage(credits.error) : "Remaining credits"}
+    >
       <Badge
         size="xl"
-        id={badgeId}
         variant={credits.error ? "outline" : "default"}
         color={credits.error ? "red" : undefined}
         leftSection={<Coins className="size-4" />}
@@ -28,16 +32,6 @@ export function CreditsBadge() {
           `${Number(credits?.data?.balance ?? "0").toFixed(2)} credits`
         )}
       </Badge>
-      {credits.error && (
-        <Tooltip
-          multiline
-          withArrow
-          interactive
-          className="w-60"
-          target={`#${badgeId}`}
-          label={getErrorMessage(credits.error)}
-        />
-      )}
-    </>
+    </Tooltip>
   );
 }

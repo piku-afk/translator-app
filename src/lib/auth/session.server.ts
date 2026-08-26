@@ -13,7 +13,7 @@ const DEFAULT_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 /** The configured session lifetime, falling back to one day. */
 export function maxAgeSeconds(): number {
-  const raw = env.SESSION_MAX_AGE_IN_SECONDS;
+  const raw = env.SESSION_MAX_AGE_SECONDS;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_AGE_SECONDS;
 }
@@ -66,11 +66,11 @@ export async function startSession(password: string): Promise<LoginResult> {
     const secure = getRequest().url.startsWith("https:");
     const sealed = await sealSession({ secret: sessionSecret(), ttlSeconds: maxAge });
     setCookie(name, sealed, {
-      httpOnly: true,
-      secure,
-      sameSite: "lax",
-      path: "/",
       maxAge,
+      secure,
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
     });
   }
 
@@ -79,5 +79,7 @@ export async function startSession(password: string): Promise<LoginResult> {
 
 /** Clear the session cookie, invalidating the session. */
 export async function endSession(): Promise<void> {
-  deleteCookie(cookieName(), { path: "/" });
+  const name = cookieName();
+  const secure = getRequest().url.startsWith("https:");
+  deleteCookie(name, { path: "/", secure });
 }
