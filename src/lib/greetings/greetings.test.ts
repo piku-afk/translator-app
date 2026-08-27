@@ -74,6 +74,17 @@ describe("getDayInTimezone", () => {
 });
 
 describe("selectGreeting", () => {
+  // Messages with no tags: valid at any time, on any day (see greeting-messages).
+  const GENERICS = [
+    "Back at it!",
+    "Hey there",
+    "Hi, how are you?",
+    "How's it going?",
+    "Welcome",
+    "What's new?",
+    "What's on your mind?",
+  ];
+
   it("returns a message from the correct filtered pool for a timezone and instant", () => {
     // Monday morning in UTC.
     const mondayMorning = selectGreeting(
@@ -81,20 +92,7 @@ describe("selectGreeting", () => {
       "UTC",
       new Date("2025-01-06T09:00:00Z"),
     );
-    const mondayMorningPool = [
-      "Back at it!",
-      "Greetings, whoever you are",
-      "Hey there",
-      "Hi, how are you?",
-      "How’s it going?",
-      "Let’s chat incognito",
-      "Welcome",
-      "What’s new?",
-      "What’s on your mind?",
-      "You’re incognito",
-      "Good morning",
-      "Happy Monday",
-    ];
+    const mondayMorningPool = [...GENERICS, "Good morning", "Happy Monday"];
     expect(mondayMorningPool).toContain(mondayMorning);
 
     // Friday evening in UTC.
@@ -104,19 +102,11 @@ describe("selectGreeting", () => {
       new Date("2025-01-10T19:00:00Z"),
     );
     const fridayEveningPool = [
-      "Back at it!",
-      "Greetings, whoever you are",
-      "Hey there",
-      "Hi, how are you?",
-      "How’s it going?",
-      "Let’s chat incognito",
-      "Welcome",
-      "What’s new?",
-      "What’s on your mind?",
-      "You’re incognito",
+      ...GENERICS,
       "Evening",
       "Good evening",
       "How was your day?",
+      "Evening, how are things?",
       "Happy Friday",
       "That Friday feeling",
     ];
@@ -129,18 +119,10 @@ describe("selectGreeting", () => {
       new Date("2025-01-11T23:30:00Z"),
     );
     const saturdayNightPool = [
-      "Back at it!",
-      "Greetings, whoever you are",
-      "Hey there",
-      "Hi, how are you?",
-      "How’s it going?",
-      "Let’s chat incognito",
-      "Welcome",
-      "What’s new?",
-      "What’s on your mind?",
-      "You’re incognito",
+      ...GENERICS,
       "Hello, night owl",
-      "What’s on your mind tonight?",
+      "What's on your mind tonight?",
+      "Up late?",
       "Happy Saturday!",
       "Welcome to the weekend",
     ];
@@ -148,21 +130,7 @@ describe("selectGreeting", () => {
 
     // Sunday daytime in UTC.
     const sunday = selectGreeting(GREETING_MESSAGES, "UTC", new Date("2025-01-12T10:00:00Z"));
-    const sundayPool = [
-      "Back at it!",
-      "Greetings, whoever you are",
-      "Hey there",
-      "Hi, how are you?",
-      "How’s it going?",
-      "Let’s chat incognito",
-      "Welcome",
-      "What’s new?",
-      "What’s on your mind?",
-      "You’re incognito",
-      "Happy Sunday",
-      "Sunday session?",
-      "Welcome to the weekend",
-    ];
+    const sundayPool = [...GENERICS, "Good morning", "Happy Sunday", "Sunday session?", "Welcome to the weekend"];
     expect(sundayPool).toContain(sunday);
   });
 

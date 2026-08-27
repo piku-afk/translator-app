@@ -49,6 +49,7 @@ export const GREETING_MESSAGES: readonly GreetingMessage[] = [
   // Night - 0-4 and 22-23.
   { message: "Hello, night owl", time: ["night"] },
   { message: "What's on your mind tonight?", time: ["night"] },
+  { message: "Up late?", time: ["night"] },
 
   // Per-day.
   { message: "Happy Monday", days: ["mon"] },

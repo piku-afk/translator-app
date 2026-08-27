@@ -1,12 +1,6 @@
+import type { Insertable, Selectable } from "kysely";
 import { z } from "zod";
-
-/**
- * Pure, framework- and Cloudflare-agnostic Novel domain vocabulary.
- *
- * Types, the create-novel validation schema, and the storage-namespace helpers
- * (kebab slug + R2 key layout) live here so both the service seam and the
- * framework shell share one source of truth. No I/O, no bindings.
- */
+import type { Novels } from "../database/database-types.gen";
 
 export const SOURCE_LANGUAGES = ["ko", "zh"] as const;
 export type SourceLanguage = (typeof SOURCE_LANGUAGES)[number];
@@ -20,6 +14,13 @@ export function sourceLanguageLabel(language: SourceLanguage): string {
   return SOURCE_LANGUAGE_LABELS[language];
 }
 
+/** Options for the source-language selector, derived from the canonical labels. */
+export const SOURCE_LANGUAGE_OPTIONS: Array<{ value: SourceLanguage; label: string }> =
+  SOURCE_LANGUAGES.map((language) => ({
+    value: language,
+    label: SOURCE_LANGUAGE_LABELS[language],
+  }));
+
 export const NOVEL_STATUSES = [
   "draft",
   "parsing",
@@ -31,20 +32,11 @@ export const NOVEL_STATUSES = [
 ] as const;
 export type NovelStatus = (typeof NOVEL_STATUSES)[number];
 
-/** A novel as handed to the store port, before the store assigns an id. */
-export interface NewNovelRecord {
-  name: string;
-  slug: string;
-  sourceLanguage: SourceLanguage;
-  totalChapters: number;
-  status: NovelStatus;
-  createdAt: string;
-  updatedAt: string;
-}
+/** A novel as stored: the D1 row shape, untouched by any translation. */
+export type Novel = Selectable<Novels>;
 
-export interface Novel extends NewNovelRecord {
-  id: number;
-}
+/** A novel ready to insert, before D1 assigns the autoincrement id. */
+export type NewNovelRecord = Insertable<Novels>;
 
 /** Shared field schemas so the form and the server validate identically. */
 export const NovelNameSchema = z.string().trim().min(1, "Novel name is required");
@@ -58,9 +50,9 @@ export const SourceLanguageSchema = z.enum(SOURCE_LANGUAGES, {
 
 export const CreateNovelSchema = z.object({
   name: NovelNameSchema,
-  totalChapters: TotalChaptersSchema,
-  sourceLanguage: SourceLanguageSchema,
-  rawText: z.string().min(1, "Raw text file is required"),
+  total_chapters: TotalChaptersSchema,
+  source_language: SourceLanguageSchema,
+  raw_text: z.string().min(1, "Raw text file is required"),
 });
 
 export type CreateNovelInput = z.infer<typeof CreateNovelSchema>;

@@ -35,8 +35,6 @@ const DATA_KINDS = new Set([
   "MergeQueryNode",
 ]);
 
-// Raw `sql` is allowed in a migration for exotic DDL (per ADR-0003), but a raw
-// statement whose first keyword touches data must still be rejected.
 const DATA_KEYWORDS = new Set([
   "select",
   "insert",

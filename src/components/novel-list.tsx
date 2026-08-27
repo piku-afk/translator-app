@@ -28,7 +28,7 @@ export function NovelList() {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {novels.map((novel) => (
-        <NovelCard key={novel.id} novel={novel} />
+        <NovelCard key={novel.id ?? ""} novel={novel} />
       ))}
     </div>
   );

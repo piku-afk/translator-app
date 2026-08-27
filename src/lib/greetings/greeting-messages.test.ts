@@ -11,10 +11,10 @@ const hasTime = (m: GreetingMessage, bucket: TimeBucket) => m.time?.includes(buc
 const hasDay = (m: GreetingMessage, day: DayBucket) => m.days?.includes(day) ?? false;
 
 describe("GREETING_MESSAGES", () => {
-  it("covers all 27 name-free messages with no duplicates", () => {
-    expect(GREETING_MESSAGES).toHaveLength(27);
+  it("covers all 26 name-free messages with no duplicates", () => {
+    expect(GREETING_MESSAGES).toHaveLength(26);
     const texts = GREETING_MESSAGES.map((m) => m.message);
-    expect(new Set(texts).size).toBe(27);
+    expect(new Set(texts).size).toBe(26);
   });
 
   it("contains no name-requiring messages", () => {
@@ -31,11 +31,11 @@ describe("GREETING_MESSAGES", () => {
     const night = GREETING_MESSAGES.filter((m) => hasTime(m, "night"));
     const perDay = GREETING_MESSAGES.filter((m) => m.days !== undefined);
 
-    expect(generic).toHaveLength(10);
+    expect(generic).toHaveLength(7);
     expect(morning).toHaveLength(1);
     expect(afternoon).toHaveLength(1);
-    expect(evening).toHaveLength(3);
-    expect(night).toHaveLength(2);
+    expect(evening).toHaveLength(4);
+    expect(night).toHaveLength(3);
     expect(perDay).toHaveLength(10);
   });
 

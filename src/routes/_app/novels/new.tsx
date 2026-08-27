@@ -16,29 +16,25 @@ import { Button } from "#/components/ui/button";
 import { createNovel, novelsQueryKey } from "#/lib/novels/novels";
 import {
   NovelNameSchema,
+  SOURCE_LANGUAGE_OPTIONS,
   SourceLanguageSchema,
   TotalChaptersSchema,
   type SourceLanguage,
 } from "#/lib/novels/novels-core";
 import { getErrorMessage } from "#/lib/utils";
 
-const SOURCE_LANGUAGE_OPTIONS = [
-  { value: "ko", label: "Korean" },
-  { value: "zh", label: "Chinese" },
-];
-
 const FormSchema = z.object({
   name: NovelNameSchema,
-  totalChapters: TotalChaptersSchema,
-  sourceLanguage: SourceLanguageSchema,
-  rawFile: z.instanceof(File, { message: "Raw text file is required" }),
+  total_chapters: TotalChaptersSchema,
+  source_language: SourceLanguageSchema,
+  raw_text: z.instanceof(File, { message: "Raw text file is required" }),
 });
 
 interface NewNovelFormValues {
   name: string;
-  totalChapters: number | undefined;
-  sourceLanguage: SourceLanguage | "";
-  rawFile: File | null;
+  total_chapters: number | undefined;
+  source_language: SourceLanguage | "";
+  raw_text: File | null;
 }
 
 export const Route = createFileRoute("/_app/novels/new")({
@@ -58,9 +54,9 @@ export const Route = createFileRoute("/_app/novels/new")({
       mode: "uncontrolled",
       initialValues: {
         name: "",
-        totalChapters: undefined,
-        sourceLanguage: "",
-        rawFile: null,
+        total_chapters: undefined,
+        source_language: "",
+        raw_text: null,
       },
       validate: schemaResolver(FormSchema),
     });
@@ -77,14 +73,14 @@ export const Route = createFileRoute("/_app/novels/new")({
 
           <form
             onSubmit={form.onSubmit((values) => {
-              const totalChapters = values.totalChapters ?? 0;
-              void values.rawFile?.text().then((rawText) => {
+              const total_chapters = values.total_chapters ?? 0;
+              void values.raw_text?.text().then((raw_text) => {
                 createNovelMutation.mutate({
                   data: {
                     name: values.name,
-                    totalChapters,
-                    sourceLanguage: values.sourceLanguage as SourceLanguage,
-                    rawText,
+                    total_chapters,
+                    source_language: values.source_language as SourceLanguage,
+                    raw_text,
                   },
                 });
               });
@@ -105,8 +101,8 @@ export const Route = createFileRoute("/_app/novels/new")({
                 min={1}
                 allowNegative={false}
                 classNames={{ label: "mb-2" }}
-                key={form.key("totalChapters")}
-                {...form.getInputProps("totalChapters")}
+                key={form.key("total_chapters")}
+                {...form.getInputProps("total_chapters")}
               />
 
               <Select
@@ -115,8 +111,8 @@ export const Route = createFileRoute("/_app/novels/new")({
                 data={SOURCE_LANGUAGE_OPTIONS}
                 allowDeselect={false}
                 classNames={{ label: "mb-2" }}
-                key={form.key("sourceLanguage")}
-                {...form.getInputProps("sourceLanguage")}
+                key={form.key("source_language")}
+                {...form.getInputProps("source_language")}
               />
 
               <FileInput
@@ -125,8 +121,8 @@ export const Route = createFileRoute("/_app/novels/new")({
                 accept=".txt,text/plain"
                 clearable
                 classNames={{ label: "mb-2" }}
-                key={form.key("rawFile")}
-                {...form.getInputProps("rawFile")}
+                key={form.key("raw_text")}
+                {...form.getInputProps("raw_text")}
               />
 
               <Button
