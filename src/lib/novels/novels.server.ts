@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { createDb } from "../database/database";
 import {
   createTranslatorService,
   type NovelStore,
@@ -13,8 +14,17 @@ import type { NewNovelRecord, Novel } from "./novels-core";
  * service's domain shapes and the storage layer's row/object shapes.
  */
 
-interface NovelRow {
-  id: number;
+const db = createDb(env.DB);
+
+/**
+ * Map a generated D1 row back to the domain's camelCase Novel shape.
+ *
+ * The generated types are intentionally wide (PKs nullable, `ko`/`zh` as
+ * plain `string`), so we narrow the values the domain already guarantees (
+ * the DB schema CHECKs source_language and status).
+ */
+function mapRow(row: {
+  id: number | null;
   name: string;
   slug: string;
   source_language: string;
@@ -22,11 +32,9 @@ interface NovelRow {
   status: string;
   created_at: string;
   updated_at: string;
-}
-
-function mapRow(row: NovelRow): Novel {
+}): Novel {
   return {
-    id: row.id,
+    id: row.id ?? 0,
     name: row.name,
     slug: row.slug,
     sourceLanguage: row.source_language as Novel["sourceLanguage"],
@@ -39,35 +47,51 @@ function mapRow(row: NovelRow): Novel {
 
 const novelStore: NovelStore = {
   async insert(record: NewNovelRecord): Promise<Novel> {
-    await env.DB.prepare(
-      `INSERT INTO novels (name, slug, source_language, total_chapters, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(
-        record.name,
-        record.slug,
-        record.sourceLanguage,
-        record.totalChapters,
-        record.status,
-        record.createdAt,
-        record.updatedAt,
-      )
-      .run();
+    await db
+      .insertInto("novels")
+      .values({
+        name: record.name,
+        slug: record.slug,
+        source_language: record.sourceLanguage,
+        total_chapters: record.totalChapters,
+        status: record.status,
+        created_at: record.createdAt,
+        updated_at: record.updatedAt,
+      })
+      .execute();
 
-    const row = await env.DB.prepare(`SELECT last_insert_rowid() AS id`).first<{ id: number }>();
-    return { ...record, id: row?.id ?? 0 };
+    // The row was just inserted, so it has an id; the generated type types the
+    // PK as nullable, so narrow it to the non-null `number` the domain expects.
+    const row = await db
+      .selectFrom("novels")
+      .select("id")
+      .where("slug", "=", record.slug)
+      .orderBy("id", "desc")
+      .limit(1)
+      .executeTakeFirstOrThrow();
+
+    return { ...record, id: row.id as number }; // id is present right after insert
   },
 
   async findBySlug(slug: string): Promise<Novel | null> {
-    const row = await env.DB.prepare(`SELECT * FROM novels WHERE slug = ?`).bind(slug).first<NovelRow>();
+    const row = await db
+      .selectFrom("novels")
+      .selectAll()
+      .where("slug", "=", slug)
+      .executeTakeFirst();
+
     return row ? mapRow(row) : null;
   },
 
   async list(): Promise<Novel[]> {
-    const { results } = await env.DB.prepare(
-      `SELECT * FROM novels ORDER BY created_at DESC, id DESC`,
-    ).all<NovelRow>();
-    return results.map(mapRow);
+    const rows = await db
+      .selectFrom("novels")
+      .selectAll()
+      .orderBy("created_at", "desc")
+      .orderBy("id", "desc")
+      .execute();
+
+    return rows.map(mapRow);
   },
 };
 

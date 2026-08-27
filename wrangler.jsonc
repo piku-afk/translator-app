@@ -14,15 +14,15 @@
     {
       "binding": "DB",
       "database_name": "translator",
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "./migrations"
-    }
+      "database_id": "d13d5ac6-98c3-47c6-8370-99a93b687a6f",
+      "migrations_dir": "./d1-migrations",
+    },
   ],
   "r2_buckets": [
     {
       "binding": "NOVELS_BUCKET",
-      "bucket_name": "translator-novels"
-    }
+      "bucket_name": "translator-novels",
+    },
   ],
   "observability": {
     "enabled": false,
