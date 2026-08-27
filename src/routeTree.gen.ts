@@ -13,7 +13,6 @@ import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as ApiActivityRouteImport } from './routes/api/activity'
-import { Route as ApiNovelsRouteImport } from './routes/api/novels'
 import { Route as AppNovelsNewRouteImport } from './routes/_app/novels/new'
 
 const AppRouteRoute = AppRouteRouteImport.update({
@@ -35,11 +34,6 @@ const ApiActivityRoute = ApiActivityRouteImport.update({
   path: '/api/activity',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiNovelsRoute = ApiNovelsRouteImport.update({
-  id: '/api/novels',
-  path: '/api/novels',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AppNovelsNewRoute = AppNovelsNewRouteImport.update({
   id: '/novels/new',
   path: '/novels/new',
@@ -50,13 +44,11 @@ export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
   '/api/activity': typeof ApiActivityRoute
-  '/api/novels': typeof ApiNovelsRoute
   '/novels/new': typeof AppNovelsNewRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/api/activity': typeof ApiActivityRoute
-  '/api/novels': typeof ApiNovelsRoute
   '/': typeof AppIndexRoute
   '/novels/new': typeof AppNovelsNewRoute
 }
@@ -65,21 +57,19 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/api/activity': typeof ApiActivityRoute
-  '/api/novels': typeof ApiNovelsRoute
   '/_app/': typeof AppIndexRoute
   '/_app/novels/new': typeof AppNovelsNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/api/activity' | '/api/novels' | '/novels/new'
+  fullPaths: '/' | '/login' | '/api/activity' | '/novels/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/api/activity' | '/api/novels' | '/' | '/novels/new'
+  to: '/login' | '/api/activity' | '/' | '/novels/new'
   id:
     | '__root__'
     | '/_app'
     | '/login'
     | '/api/activity'
-    | '/api/novels'
     | '/_app/'
     | '/_app/novels/new'
   fileRoutesById: FileRoutesById
@@ -88,7 +78,6 @@ export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
   ApiActivityRoute: typeof ApiActivityRoute
-  ApiNovelsRoute: typeof ApiNovelsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -121,13 +110,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiActivityRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/novels': {
-      id: '/api/novels'
-      path: '/api/novels'
-      fullPath: '/api/novels'
-      preLoaderRoute: typeof ApiNovelsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_app/novels/new': {
       id: '/_app/novels/new'
       path: '/novels/new'
@@ -156,7 +138,6 @@ const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
   LoginRoute: LoginRoute,
   ApiActivityRoute: ApiActivityRoute,
-  ApiNovelsRoute: ApiNovelsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
