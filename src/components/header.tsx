@@ -36,7 +36,7 @@ export function Header() {
           <Group className="gap-4">
             <CreditsBadge />
 
-            <Tooltip label="Log out">
+            <Tooltip withArrow label="Log out">
               <ActionIcon
                 size="md"
                 variant="default"
