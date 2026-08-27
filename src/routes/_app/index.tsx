@@ -1,12 +1,16 @@
-import { Stack } from "@mantine/core";
-import { createFileRoute } from "@tanstack/react-router";
+import { Button, Group, Stack } from "@mantine/core";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Greeting, GreetingSkeleton } from "#/components/greeting";
+import { NovelList, NovelListSkeleton } from "#/components/novel-list";
 import { getGreetingDataQueryOptions } from "#/lib/greetings/greetings";
+import { getNovelsQueryOptions } from "#/lib/novels/novels";
+import { Plus } from "lucide-react";
 import { Suspense } from "react";
 
 export const Route = createFileRoute("/_app/")({
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(getGreetingDataQueryOptions());
+    await context.queryClient.ensureQueryData(getNovelsQueryOptions());
   },
   component: function HomePage() {
     return (
@@ -15,11 +19,24 @@ export const Route = createFileRoute("/_app/")({
           <Greeting />
         </Suspense>
 
-        {/* Featured Novels */}
+        {/* Your Novels */}
         <section className="space-y-8">
-          <h2 className="text-xl font-medium text-foreground" aria-level={2}>
-            Your Novels
-          </h2>
+          <Group className="justify-between">
+            <h2 className="text-xl font-medium text-foreground" aria-level={2}>
+              Your Novels
+            </h2>
+            <Button
+              variant="filled"
+              renderRoot={(props) => <Link to="/novels/new" {...props} />}
+            >
+              <Plus />
+              New Novel
+            </Button>
+          </Group>
+
+          <Suspense fallback={<NovelListSkeleton />}>
+            <NovelList />
+          </Suspense>
         </section>
 
         {/* Recent Activity */}

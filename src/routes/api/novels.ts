@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { fetchNovels } from "../../lib/mock-data";
 import { isAuthenticated } from "#/lib/auth/session.server";
+import { getTranslatorService } from "#/lib/novels/novels.server";
 
 export const Route = createFileRoute("/api/novels")({
   server: {
@@ -11,7 +11,8 @@ export const Route = createFileRoute("/api/novels")({
         if (!(await isAuthenticated())) {
           return Response.json({ error: "Unauthorized" }, { status: 401 });
         }
-        return Response.json(await fetchNovels());
+        const novels = await getTranslatorService().listNovels();
+        return Response.json(novels);
       },
     },
   },
