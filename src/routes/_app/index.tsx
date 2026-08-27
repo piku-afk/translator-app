@@ -1,19 +1,18 @@
 import { Stack } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { Greeting, GreetingSkeleton } from "#/components/greeting";
-import { getGreetingDataQueryOptions } from "#/lib/greetings";
+import { getGreetingDataQueryOptions } from "#/lib/greetings/greetings";
 import { Suspense } from "react";
 
 export const Route = createFileRoute("/_app/")({
-  context: () => ({ timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   loader: async ({ context }) => {
-    await context.queryClient.ensureQueryData(getGreetingDataQueryOptions(context.timezone));
+    await context.queryClient.ensureQueryData(getGreetingDataQueryOptions());
   },
   component: function HomePage() {
     return (
       <Stack className="gap-10">
         <Suspense fallback={<GreetingSkeleton />}>
-          <Greeting name="John" />
+          <Greeting />
         </Suspense>
 
         {/* Featured Novels */}

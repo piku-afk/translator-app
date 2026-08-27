@@ -1,9 +1,6 @@
 import { Skeleton, Stack, Text, Title } from "@mantine/core";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { getGreetingDataQueryOptions } from "#/lib/greetings";
-import { getRouteApi } from "@tanstack/react-router";
-
-const route = getRouteApi("/_app/");
+import { getGreetingDataQueryOptions } from "#/lib/greetings/greetings";
 
 export function GreetingSkeleton() {
   return (
@@ -14,17 +11,14 @@ export function GreetingSkeleton() {
   );
 }
 
-export function Greeting({ name }: { name: string }) {
-  const context = route.useRouteContext();
+export function Greeting() {
   const {
     data: { greeting, subtext },
-  } = useSuspenseQuery(getGreetingDataQueryOptions(context.timezone));
+  } = useSuspenseQuery(getGreetingDataQueryOptions());
 
   return (
     <Stack className="items-center text-center gap-2">
-      <Title className="text-3xl font-semibold">
-        {greeting}, {name}
-      </Title>
+      <Title className="text-3xl font-semibold">{greeting}</Title>
 
       <Text c="dimmed" className="text-sm">
         {subtext}

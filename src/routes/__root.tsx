@@ -22,22 +22,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "icon", href: favicon },
       { rel: "stylesheet", href: appCss },
     ],
-    scripts: [
-      {
-        children: `
-          (function () {
-            try {
-              var tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
-              if (tz && !document.cookie.match(/(^|;) *tz=([^;]*)/)) {
-                document.cookie =
-                  "tz=" + encodeURIComponent(tz) +
-                  "; path=/; max-age=31536000; SameSite=Lax";
-              }
-            } catch (e) {}
-          })();
-        `,
-      },
-    ],
   }),
   component: function RootComponent() {
     const { queryClient } = Route.useRouteContext();
