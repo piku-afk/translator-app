@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireAuth } from "#/lib/auth/session.server";
-import { getGreeting, getHourInTimezone, getSubtext } from "./greetings-core";
+import { getSubtext, selectGreeting } from "./greetings-core";
+import { GREETING_MESSAGES } from "./greeting-messages";
 
 export interface GreetingData {
   greeting: string;
@@ -21,11 +22,15 @@ const getGreetingData = createServerFn()
   .validator((data: { currentTime: string }) => data)
   .handler(async ({ data }) => {
     await requireAuth();
-    const hour = getHourInTimezone(getClientTimezone(), new Date(data.currentTime));
+    const greeting = selectGreeting(
+      GREETING_MESSAGES,
+      getClientTimezone(),
+      new Date(data.currentTime),
+    );
 
     return {
       subtext: getSubtext(),
-      greeting: getGreeting(hour),
+      greeting,
     } satisfies GreetingData;
   });
 

@@ -25,32 +25,29 @@ export interface GreetingMessage {
 }
 
 export const GREETING_MESSAGES: readonly GreetingMessage[] = [
-  // Generic — valid at any time on any day.
+  // Generic - valid at any time on any day.
   { message: "Back at it!" },
-  { message: "Greetings, whoever you are" },
   { message: "Hey there" },
   { message: "Hi, how are you?" },
-  { message: "How’s it going?" },
-  { message: "Let’s chat incognito" },
+  { message: "How's it going?" },
   { message: "Welcome" },
-  { message: "What’s new?" },
-  { message: "What’s on your mind?" },
-  { message: "You’re incognito" },
+  { message: "What's new?" },
+  { message: "What's on your mind?" },
 
-  // Morning — 5-11.
+  // Morning - 5-11.
   { message: "Good morning", time: ["morning"] },
 
-  // Afternoon — 12-17.
+  // Afternoon - 12-17.
   { message: "Good afternoon", time: ["afternoon"] },
 
-  // Evening — 18-21.
+  // Evening - 18-21.
   { message: "Evening", time: ["evening"] },
   { message: "Good evening", time: ["evening"] },
   { message: "How was your day?", time: ["evening"] },
 
-  // Night — 0-4 and 22-23.
+  // Night - 0-4 and 22-23.
   { message: "Hello, night owl", time: ["night"] },
-  { message: "What’s on your mind tonight?", time: ["night"] },
+  { message: "What's on your mind tonight?", time: ["night"] },
 
   // Per-day.
   { message: "Happy Monday", days: ["mon"] },

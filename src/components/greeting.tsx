@@ -11,16 +11,14 @@ export function GreetingSkeleton() {
   );
 }
 
-export function Greeting({ name }: { name: string }) {
+export function Greeting() {
   const {
     data: { greeting, subtext },
   } = useSuspenseQuery(getGreetingDataQueryOptions());
 
   return (
     <Stack className="items-center text-center gap-2">
-      <Title className="text-3xl font-semibold">
-        {greeting}, {name}
-      </Title>
+      <Title className="text-3xl font-semibold">{greeting}</Title>
 
       <Text c="dimmed" className="text-sm">
         {subtext}

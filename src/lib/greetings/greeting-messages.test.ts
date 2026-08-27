@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { GREETING_MESSAGES, type GreetingMessage } from "./greeting-messages";
+import {
+  GREETING_MESSAGES,
+  type DayBucket,
+  type GreetingMessage,
+  type TimeBucket,
+} from "./greeting-messages";
 
 const isGeneric = (m: GreetingMessage) => m.time === undefined && m.days === undefined;
-const hasTime = (m: GreetingMessage, bucket: string) => m.time?.includes(bucket as never) ?? false;
-const hasDay = (m: GreetingMessage, day: string) => m.days?.includes(day as never) ?? false;
+const hasTime = (m: GreetingMessage, bucket: TimeBucket) => m.time?.includes(bucket) ?? false;
+const hasDay = (m: GreetingMessage, day: DayBucket) => m.days?.includes(day) ?? false;
 
 describe("GREETING_MESSAGES", () => {
   it("covers all 27 name-free messages with no duplicates", () => {
@@ -35,7 +40,7 @@ describe("GREETING_MESSAGES", () => {
   });
 
   it("assigns the expected per-day messages", () => {
-    const byDay = (day: string) =>
+    const byDay = (day: DayBucket) =>
       GREETING_MESSAGES.filter((m) => hasDay(m, day)).map((m) => m.message);
 
     expect(byDay("mon")).toEqual(["Happy Monday"]);

@@ -1,33 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   getDayInTimezone,
-  getGreeting,
   getHourInTimezone,
   getSubtext,
   getTimeBucket,
   selectGreeting,
 } from "./greetings-core";
 import { GREETING_MESSAGES, type GreetingMessage } from "./greeting-messages";
-
-describe("getGreeting", () => {
-  it.each([
-    [0, "Good morning"],
-    [5, "Good morning"],
-    [11, "Good morning"],
-    [12, "Good afternoon"],
-    [17, "Good afternoon"],
-    [18, "Good evening"],
-    [23, "Good evening"],
-  ])("returns %s for hour %i", (hour, expected) => {
-    expect(getGreeting(hour)).toBe(expected);
-  });
-
-  it("rejects hours outside the 0-23 clock", () => {
-    expect(() => getGreeting(-1)).toThrow(RangeError);
-    expect(() => getGreeting(24)).toThrow(RangeError);
-    expect(() => getGreeting(1.5)).toThrow(RangeError);
-  });
-});
 
 describe("getHourInTimezone", () => {
   it("reads the local hour in the given timezone", () => {

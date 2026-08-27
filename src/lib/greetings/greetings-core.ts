@@ -9,18 +9,6 @@
 import type { DayBucket, GreetingMessage, TimeBucket } from "./greeting-messages";
 
 /**
- * Time-of-day greeting for an hour on the 24-hour clock (0-23).
- */
-export function getGreeting(hour: number): string {
-  if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
-    throw new RangeError(`getGreeting expects an hour in 0..23, got ${hour}`);
-  }
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
-}
-
-/**
  * Static subtext shown beneath the greeting.
  */
 export function getSubtext(): string {
@@ -59,6 +47,12 @@ export function getTimeBucket(hour: number): TimeBucket {
   return "night"; // hours 22-23
 }
 
+const DAY_BUCKETS: readonly DayBucket[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+
+function isDayBucket(day: string): day is DayBucket {
+  return DAY_BUCKETS.some((d) => d === day);
+}
+
 /**
  * Local day-of-week (lowercase `mon`..`sun`) of `at` in `timeZone`, computed
  * with `Intl.DateTimeFormat` so the day follows the client's calendar.
@@ -68,7 +62,13 @@ export function getDayInTimezone(timeZone: string, at: Date): DayBucket {
     weekday: "short",
     timeZone,
   }).format(at);
-  return formatted.toLowerCase() as DayBucket;
+  const day = formatted.toLowerCase();
+
+  if (!isDayBucket(day)) {
+    throw new RangeError(`getDayInTimezone produced unexpected day "${day}"`);
+  }
+
+  return day;
 }
 
 /**

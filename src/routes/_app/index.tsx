@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_app/")({
     return (
       <Stack className="gap-10">
         <Suspense fallback={<GreetingSkeleton />}>
-          <Greeting name="John" />
+          <Greeting />
         </Suspense>
 
         {/* Featured Novels */}
