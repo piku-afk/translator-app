@@ -1,11 +1,11 @@
-import type { Insertable, Selectable } from "kysely";
+import type { Selectable } from "kysely";
 import { z } from "zod";
 import type { Novels } from "../database/database-types.gen";
 
-export const SOURCE_LANGUAGES = ["ko", "zh"] as const;
+const SOURCE_LANGUAGES = ["ko", "zh"] as const;
 export type SourceLanguage = (typeof SOURCE_LANGUAGES)[number];
 
-export const SOURCE_LANGUAGE_LABELS: Record<SourceLanguage, string> = {
+const SOURCE_LANGUAGE_LABELS: Record<SourceLanguage, string> = {
   ko: "Korean",
   zh: "Chinese",
 };
@@ -21,7 +21,7 @@ export const SOURCE_LANGUAGE_OPTIONS: Array<{ value: SourceLanguage; label: stri
     label: SOURCE_LANGUAGE_LABELS[language],
   }));
 
-export const NOVEL_STATUSES = [
+const NOVEL_STATUSES = [
   "draft",
   "parsing",
   "ready",
@@ -35,9 +35,6 @@ export type NovelStatus = (typeof NOVEL_STATUSES)[number];
 
 /** A novel as stored: the D1 row shape, untouched by any translation. */
 export type Novel = Selectable<Novels>;
-
-/** A novel ready to insert, before D1 assigns the autoincrement id. */
-export type NewNovelRecord = Insertable<Novels>;
 
 /** Shared field schemas so the form and the server validate identically. */
 export const NovelNameSchema = z.string().trim().min(1, "Novel name is required");
@@ -77,5 +74,4 @@ export function chapterFileKey(slug: string, number: number): string {
   return `novels/${slug}/chapters/${number}.txt`;
 }
 
-export const INVALID_NOVEL_INPUT_ERROR = "Invalid novel input";
 export const DUPLICATE_NOVEL_ERROR = "A novel with this name already exists";

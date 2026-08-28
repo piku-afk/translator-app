@@ -23,10 +23,7 @@ const KO_CHAPTER_NUMBER = /^(\d+)화\./;
 const ZH_SPLIT = /(?=第\d+章)/;
 const ZH_CHAPTER_NUMBER = /^第(\d+)章/;
 
-const EXTRACTORS: Record<
-  SourceLanguage,
-  { split: RegExp; chapterNumber: RegExp }
-> = {
+const EXTRACTORS: Record<SourceLanguage, { split: RegExp; chapterNumber: RegExp }> = {
   ko: { split: KO_SPLIT, chapterNumber: KO_CHAPTER_NUMBER },
   zh: { split: ZH_SPLIT, chapterNumber: ZH_CHAPTER_NUMBER },
 };

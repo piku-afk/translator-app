@@ -28,7 +28,7 @@ export default createServerEntry({
 });
 
 /**
- * Parse-queue consumer (ADR-0005). The service returns a settlement per
+ * Parse-queue consumer. The service returns a settlement per
  * message: it has either finished the work ("ack" - including a finalized
  * novel on retry exhaustion, see runParseJob) or asked for another attempt
  * ("retry").

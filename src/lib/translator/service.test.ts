@@ -101,7 +101,11 @@ async function seedNovel(db: Kysely<Database>, overrides: Partial<Novel> = {}): 
 }
 
 async function firstNovelId(db: Kysely<Database>, slug: string): Promise<number | undefined> {
-  const row = await db.selectFrom("novels").select("id").where("slug", "=", slug).executeTakeFirst();
+  const row = await db
+    .selectFrom("novels")
+    .select("id")
+    .where("slug", "=", slug)
+    .executeTakeFirst();
   return row?.id;
 }
 
@@ -122,7 +126,11 @@ async function seedChapter(db: Kysely<Database>, novelId: number, number: number
 }
 
 /** Upload a raw text with `chaptersPerMarker` Korean chapters for `novel`. */
-async function seedRaw(storage: ReturnType<typeof createMemoryStorage>, slug: string, numbers: number[]): Promise<void> {
+async function seedRaw(
+  storage: ReturnType<typeof createMemoryStorage>,
+  slug: string,
+  numbers: number[],
+): Promise<void> {
   const raw = numbers.map((n) => `${n}화.\n본문입니다.`).join("\n\n");
   await storage.put(rawFileKey(slug), raw);
 }
@@ -235,7 +243,9 @@ describe("runParseJob", () => {
 
     expect(settlement).toEqual({ outcome: "ack" });
     expect(storage.objects.get(chapterFileKey("the-beginning", 1))).toBe("1화.\n첫 문장입니다.");
-    expect(storage.objects.get(chapterFileKey("the-beginning", 2))).toBe("2화.\n두 번째 문장입니다.");
+    expect(storage.objects.get(chapterFileKey("the-beginning", 2))).toBe(
+      "2화.\n두 번째 문장입니다.",
+    );
     const rows = await db.selectFrom("chapters").selectAll().orderBy("number").execute();
     expect(rows.map((r) => [r.novel_id, r.number, r.status])).toEqual([
       [novel.id, 1, "queued"],

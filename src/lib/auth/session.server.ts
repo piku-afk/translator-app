@@ -12,19 +12,19 @@ import { verifyPassword } from "./password";
 const DEFAULT_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 /** The configured session lifetime, falling back to one day. */
-export function maxAgeSeconds(): number {
+function maxAgeSeconds(): number {
   const raw = env.SESSION_MAX_AGE_SECONDS;
   const parsed = Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_AGE_SECONDS;
 }
 
-export function sessionSecret(): string {
+function sessionSecret(): string {
   return env.AUTH_SESSION_SECRET;
 }
 
 // `__Host-` is only valid over https (it requires Secure + Path=/ and forbids
 // Domain), so it is used only on secure deployments; http uses a plain name.
-export function cookieName(): string {
+function cookieName(): string {
   return getRequest().url.startsWith("https:") ? "__Host-tss-session" : "tss-session";
 }
 

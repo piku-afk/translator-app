@@ -47,9 +47,9 @@ const DATA_KEYWORDS = new Set([
 ]);
 
 /**
- * Sole exception to the DDL-only rule (see ADR-0003 amendment): a data-
- * preserving table rebuild — the only way to change a CHECK constraint in
- * SQLite — needs one INSERT INTO ... SELECT copy of the old rows. Such a
+ * Sole exception to the DDL-only rule: a data-
+ * preserving table rebuild - the only way to change a CHECK constraint in
+ * SQLite - needs one INSERT INTO ... SELECT copy of the old rows. Such a
  * statement is accepted only when it carries an explicit
  * `-- migration:data-copy` marker comment and is nothing but a copy:
  * comments stripped, it must start with INSERT INTO and read via SELECT.
@@ -57,9 +57,7 @@ const DATA_KEYWORDS = new Set([
  */
 function isMarkedDataCopy(statement: string): boolean {
   if (!statement.includes("-- migration:data-copy")) return false;
-  const stripped = statement
-    .replace(/^\s*--.*$/gm, "")
-    .trim();
+  const stripped = statement.replace(/^\s*--.*$/gm, "").trim();
   return /^INSERT\s+INTO\s/i.test(stripped) && /\bSELECT\b/i.test(stripped);
 }
 

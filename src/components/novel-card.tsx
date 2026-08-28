@@ -7,9 +7,7 @@ export function NovelCard({ novel }: { novel: Novel }) {
     <Card
       withBorder
       className="p-4 bg-transparent hover:bg-white hover:border-black transition-colors cursor-pointer focus:outline-ring focus-visible:outline-2 focus-visible:outline-ring"
-      renderRoot={(props) => (
-        <Link to="/novels/$slug" params={{ slug: novel.slug }} {...props} />
-      )}
+      renderRoot={(props) => <Link to="/novels/$slug" params={{ slug: novel.slug }} {...props} />}
     >
       <Stack className="gap-4">
         <Stack className="gap-1">

@@ -27,7 +27,7 @@ export async function up(db: Kysely<any>): Promise<void> {
     .execute();
 
   // The rebuild's one and only data copy, allowed by the generator's explicit
-  // `-- migration:data-copy` opt-in (ADR-0003 amendment). No branch on data:
+  // `-- migration:data-copy` opt-in. No branch on data:
   // the statement is fixed, and existing rows all satisfy the widened CHECK.
   await sql`
     -- migration:data-copy

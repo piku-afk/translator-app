@@ -37,7 +37,10 @@ describe("extractChapters", () => {
 
     const chapters = extractChapters(rawText, "ko");
 
-    expect(chapters.map((c) => c.content)).toEqual(["1화.\n\n\n\n본문입니다.", "2화.\n본문입니다."]);
+    expect(chapters.map((c) => c.content)).toEqual([
+      "1화.\n\n\n\n본문입니다.",
+      "2화.\n본문입니다.",
+    ]);
   });
 
   it("allows gaps in chapter numbering", () => {

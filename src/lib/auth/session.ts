@@ -3,8 +3,6 @@ import { isAuthenticated, startSession, endSession } from "./session.server";
 import { GENERIC_LOGIN_ERROR, type LoginResult } from "./auth-core";
 import z from "zod";
 
-export type { LoginResult, UnsealOutcome } from "./auth-core";
-
 /**
  * Server function so loaders (which also run on the client) can check auth.
  * Runs on the server: clears any stale session cookie while it's at it.

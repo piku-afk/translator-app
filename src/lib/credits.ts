@@ -3,7 +3,7 @@ import { createGateway } from "ai";
 import { env } from "cloudflare:workers";
 import { requireAuth } from "#/lib/auth/session.server";
 
-export const creditsQueryKey = ["credits"] as const;
+const creditsQueryKey = ["credits"] as const;
 
 const getCredits = createServerFn().handler(async () => {
   await requireAuth();
