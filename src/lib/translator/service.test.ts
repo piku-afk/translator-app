@@ -2,14 +2,16 @@ import SqliteDatabase from "better-sqlite3";
 import { Kysely, SqliteDialect } from "kysely";
 import { describe, expect, it } from "vitest";
 import { up as createNovelsTable } from "../../../migrations/001_create_novels.ts";
+import { up as rebuildNovelsCreateChapters } from "../../../migrations/003_add_failed_status_and_chapters.ts";
 import type { Database } from "../database/database";
 import {
   DUPLICATE_NOVEL_ERROR,
+  chapterFileKey,
   rawFileKey,
   type CreateNovelInput,
   type Novel,
 } from "../novels/novels-core";
-import { createTranslatorService } from "./service";
+import { NOVEL_NOT_FOUND_ERROR, PARSE_MAX_RETRIES, createTranslatorService } from "./service";
 import type { ObjectStorePort, ParseJobMessage, ParseQueuePort } from "./ports";
 
 // ---------------------------------------------------------------------------
@@ -21,7 +23,7 @@ async function createTestDb(): Promise<Kysely<Database>> {
   const db = new Kysely<Database>({
     dialect: new SqliteDialect({ database: new SqliteDatabase(":memory:") }),
   });
-  for (const up of [createNovelsTable]) {
+  for (const up of [createNovelsTable, rebuildNovelsCreateChapters]) {
     await up(db);
   }
   return db;
@@ -95,12 +97,34 @@ async function seedNovel(db: Kysely<Database>, overrides: Partial<Novel> = {}): 
     ...overrides,
   };
   await db.insertInto("novels").values(row).execute();
-  return db
+  return refetchNovel(db, (await firstNovelId(db, row.slug))!);
+}
+
+async function firstNovelId(db: Kysely<Database>, slug: string): Promise<number | undefined> {
+  const row = await db.selectFrom("novels").select("id").where("slug", "=", slug).executeTakeFirst();
+  return row?.id;
+}
+
+async function refetchNovel(db: Kysely<Database>, id: number): Promise<Novel> {
+  return (await db
     .selectFrom("novels")
     .selectAll()
-    .where("slug", "=", row.slug)
-    .orderBy("id", "desc")
-    .executeTakeFirstOrThrow() as Promise<Novel>;
+    .where("id", "=", id)
+    .executeTakeFirstOrThrow()) as Novel;
+}
+
+async function seedChapter(db: Kysely<Database>, novelId: number, number: number): Promise<void> {
+  const timestamp = new Date().toISOString();
+  await db
+    .insertInto("chapters")
+    .values({ novel_id: novelId, number, created_at: timestamp, updated_at: timestamp })
+    .execute();
+}
+
+/** Upload a raw text with `chaptersPerMarker` Korean chapters for `novel`. */
+async function seedRaw(storage: ReturnType<typeof createMemoryStorage>, slug: string, numbers: number[]): Promise<void> {
+  const raw = numbers.map((n) => `${n}화.\n본문입니다.`).join("\n\n");
+  await storage.put(rawFileKey(slug), raw);
 }
 
 describe("createNovel", () => {
@@ -149,5 +173,197 @@ describe("findNovelBySlug", () => {
     const { service } = await makeService();
 
     expect(await service.findNovelBySlug("missing")).toBeUndefined();
+  });
+});
+
+describe("startParsing", () => {
+  it("moves a draft novel to parsing and enqueues a parse job", async () => {
+    const { db, parseQueue, service } = await makeService();
+    const novel = await seedNovel(db);
+
+    const updated = await service.startParsing(novel.id);
+
+    expect(updated.status).toBe("parsing");
+    expect(parseQueue.jobs).toEqual([{ novelId: novel.id }]);
+  });
+
+  it("allows re-triggering parsing from failed", async () => {
+    const { db, parseQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "failed", last_error: "boom" });
+
+    const updated = await service.startParsing(novel.id);
+
+    expect(updated.status).toBe("parsing");
+    expect(parseQueue.jobs).toEqual([{ novelId: novel.id }]);
+  });
+
+  it("rejects a novel that is not draft or failed", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "ready" });
+
+    await expect(service.startParsing(novel.id)).rejects.toThrow(
+      'Only draft or failed novels can start parsing (currently "ready")',
+    );
+  });
+
+  it("rejects an unknown novel", async () => {
+    const { service } = await makeService();
+
+    await expect(service.startParsing(1234)).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
+  });
+
+  it("reverts to draft when the enqueue fails", async () => {
+    const { db, parseQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "failed", last_error: "boom" });
+    parseQueue.setFailing(true);
+
+    await expect(service.startParsing(novel.id)).rejects.toThrow("queue unavailable");
+
+    const reverted = await refetchNovel(db, novel.id);
+    expect(reverted.status).toBe("draft");
+    expect(parseQueue.jobs).toEqual([]);
+  });
+});
+
+describe("runParseJob", () => {
+  it("extracts chapters, writes one file per chapter to storage, inserts rows, and marks the novel ready", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedNovel(db, { status: "parsing", total_chapters: 2 });
+    await storage.put(rawFileKey(novel.slug), "1화.\n첫 문장입니다.\n\n2화.\n두 번째 문장입니다.");
+
+    const settlement = await service.runParseJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    expect(storage.objects.get(chapterFileKey("the-beginning", 1))).toBe("1화.\n첫 문장입니다.");
+    expect(storage.objects.get(chapterFileKey("the-beginning", 2))).toBe("2화.\n두 번째 문장입니다.");
+    const rows = await db.selectFrom("chapters").selectAll().orderBy("number").execute();
+    expect(rows.map((r) => [r.novel_id, r.number, r.status])).toEqual([
+      [novel.id, 1, "queued"],
+      [novel.id, 2, "queued"],
+    ]);
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("ready");
+    expect(updated.last_error).toBeNull();
+  });
+
+  it("marks a novel needs review when fewer chapters than declared are extracted", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedNovel(db, { status: "parsing", total_chapters: 3 });
+    await seedRaw(storage, novel.slug, [1, 2]);
+
+    const settlement = await service.runParseJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("needs review");
+    const rows = await db.selectFrom("chapters").selectAll().execute();
+    expect(rows).toHaveLength(2);
+  });
+
+  it("marks a novel needs review when more chapters than declared are extracted", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedNovel(db, { status: "parsing", total_chapters: 1 });
+    await seedRaw(storage, novel.slug, [1, 2]);
+
+    await service.runParseJob({ novelId: novel.id }, 1);
+
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("needs review");
+  });
+
+  it("clears a stale last_error when parsing succeeds", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedNovel(db, { status: "parsing", total_chapters: 1, last_error: "boom" });
+    await seedRaw(storage, novel.slug, [1]);
+
+    await service.runParseJob({ novelId: novel.id }, 1);
+
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("ready");
+    expect(updated.last_error).toBeNull();
+  });
+
+  it("replaces chapter rows on a re-parse instead of duplicating them", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedNovel(db, { status: "parsing", total_chapters: 1 });
+    await seedChapter(db, novel.id, 9); // leftover from an earlier partial parse
+    await seedRaw(storage, novel.slug, [1]);
+
+    await service.runParseJob({ novelId: novel.id }, 1);
+
+    const rows = await db.selectFrom("chapters").selectAll().orderBy("number").execute();
+    expect(rows.map((r) => r.number)).toEqual([1]);
+  });
+
+  it("requests a retry when parsing fails, leaving the novel parsing", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedNovel(db, { status: "parsing", total_chapters: 2 });
+    // No raw file uploaded: reading it fails.
+
+    const settlement = await service.runParseJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "retry" });
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("parsing");
+    expect(storage.objects.size).toBe(0);
+  });
+
+  it("marks the novel failed with last_error once retries are exhausted", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "parsing", total_chapters: 2 });
+
+    const settlement = await service.runParseJob({ novelId: novel.id }, PARSE_MAX_RETRIES);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("failed");
+    expect(updated.last_error).toContain("Raw file missing");
+  });
+
+  it("acks stale messages for novels no longer parsing", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedNovel(db, { status: "ready" });
+    await storage.put(rawFileKey(novel.slug), "1화.\n본문입니다.");
+
+    const settlement = await service.runParseJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    expect(storage.objects.size).toBe(1); // only the raw file; no chapter writes
+    expect(await db.selectFrom("chapters").selectAll().execute()).toHaveLength(0);
+  });
+
+  it("acks messages for unknown novels", async () => {
+    const { service } = await makeService();
+
+    expect(await service.runParseJob({ novelId: 4242 }, 1)).toEqual({ outcome: "ack" });
+  });
+});
+
+describe("getNovelDetail", () => {
+  it("returns the novel with its parsed chapter count", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db);
+    await seedChapter(db, novel.id, 1);
+    await seedChapter(db, novel.id, 2);
+
+    const detail = await service.getNovelDetail("the-beginning");
+
+    expect(detail?.novel.slug).toBe("the-beginning");
+    expect(detail?.chapter_count).toBe(2);
+  });
+
+  it("reports zero chapters for an unparsed novel", async () => {
+    const { db, service } = await makeService();
+    await seedNovel(db);
+
+    const detail = await service.getNovelDetail("the-beginning");
+
+    expect(detail?.chapter_count).toBe(0);
+  });
+
+  it("returns undefined for an unknown slug", async () => {
+    const { service } = await makeService();
+
+    expect(await service.getNovelDetail("missing")).toBeUndefined();
   });
 });
