@@ -12,7 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
-import { Route as ApiActivityRouteImport } from './routes/api/activity'
+import { Route as AppNovelsSlugRouteImport } from './routes/_app/novels/$slug'
 import { Route as AppNovelsNewRouteImport } from './routes/_app/novels/new'
 
 const AppRouteRoute = AppRouteRouteImport.update({
@@ -29,10 +29,10 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const ApiActivityRoute = ApiActivityRouteImport.update({
-  id: '/api/activity',
-  path: '/api/activity',
-  getParentRoute: () => rootRouteImport,
+const AppNovelsSlugRoute = AppNovelsSlugRouteImport.update({
+  id: '/novels/$slug',
+  path: '/novels/$slug',
+  getParentRoute: () => AppRouteRoute,
 } as any)
 const AppNovelsNewRoute = AppNovelsNewRouteImport.update({
   id: '/novels/new',
@@ -43,41 +43,40 @@ const AppNovelsNewRoute = AppNovelsNewRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
-  '/api/activity': typeof ApiActivityRoute
+  '/novels/$slug': typeof AppNovelsSlugRoute
   '/novels/new': typeof AppNovelsNewRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
-  '/api/activity': typeof ApiActivityRoute
   '/': typeof AppIndexRoute
+  '/novels/$slug': typeof AppNovelsSlugRoute
   '/novels/new': typeof AppNovelsNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteRouteWithChildren
   '/login': typeof LoginRoute
-  '/api/activity': typeof ApiActivityRoute
   '/_app/': typeof AppIndexRoute
+  '/_app/novels/$slug': typeof AppNovelsSlugRoute
   '/_app/novels/new': typeof AppNovelsNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/api/activity' | '/novels/new'
+  fullPaths: '/' | '/login' | '/novels/$slug' | '/novels/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/api/activity' | '/' | '/novels/new'
+  to: '/login' | '/' | '/novels/$slug' | '/novels/new'
   id:
     | '__root__'
     | '/_app'
     | '/login'
-    | '/api/activity'
     | '/_app/'
+    | '/_app/novels/$slug'
     | '/_app/novels/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
-  ApiActivityRoute: typeof ApiActivityRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -103,12 +102,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/api/activity': {
-      id: '/api/activity'
-      path: '/api/activity'
-      fullPath: '/api/activity'
-      preLoaderRoute: typeof ApiActivityRouteImport
-      parentRoute: typeof rootRouteImport
+    '/_app/novels/$slug': {
+      id: '/_app/novels/$slug'
+      path: '/novels/$slug'
+      fullPath: '/novels/$slug'
+      preLoaderRoute: typeof AppNovelsSlugRouteImport
+      parentRoute: typeof AppRouteRoute
     }
     '/_app/novels/new': {
       id: '/_app/novels/new'
@@ -122,11 +121,13 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
+  AppNovelsSlugRoute: typeof AppNovelsSlugRoute
   AppNovelsNewRoute: typeof AppNovelsNewRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppIndexRoute: AppIndexRoute,
+  AppNovelsSlugRoute: AppNovelsSlugRoute,
   AppNovelsNewRoute: AppNovelsNewRoute,
 }
 
@@ -137,7 +138,6 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
   LoginRoute: LoginRoute,
-  ApiActivityRoute: ApiActivityRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

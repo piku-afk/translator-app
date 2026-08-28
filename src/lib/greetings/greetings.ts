@@ -4,7 +4,7 @@ import { requireAuth } from "#/lib/auth/session.server";
 import { getSubtext, selectGreeting } from "./greetings-core";
 import { listGreetingMessages } from "./greetings.server";
 
-export interface GreetingData {
+interface GreetingData {
   greeting: string;
   subtext: string;
 }
@@ -23,11 +23,7 @@ const getGreetingData = createServerFn()
   .handler(async ({ data }) => {
     await requireAuth();
     const messages = await listGreetingMessages();
-    const greeting = selectGreeting(
-      messages,
-      getClientTimezone(),
-      new Date(data.currentTime),
-    );
+    const greeting = selectGreeting(messages, getClientTimezone(), new Date(data.currentTime));
 
     return {
       subtext: getSubtext(),
@@ -35,7 +31,7 @@ const getGreetingData = createServerFn()
     } satisfies GreetingData;
   });
 
-export const greetingsQueryKey = () => ["greetings"] as const;
+const greetingsQueryKey = () => ["greetings"] as const;
 
 export function getGreetingDataQueryOptions() {
   return {

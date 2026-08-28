@@ -1,68 +1,47 @@
 import { createServerFn } from "@tanstack/react-start";
-import {
-  CreateNovelSchema,
-  DUPLICATE_NOVEL_ERROR,
-  toSlug,
-  type NewNovelRecord,
-  type Novel,
-} from "./novels-core";
-import {
-  findNovelBySlug,
-  insertNovelRecord,
-  listNovelRecords,
-  putNovelRawText,
-} from "./novels.server";
+import { z } from "zod";
+import { requireAuth } from "#/lib/auth/session.server";
+import { NOVEL_NOT_FOUND_ERROR, type NovelDetail } from "../translator/service";
+import { translatorService } from "../translator/translator.server";
+import { CreateNovelSchema, type Novel } from "./novels-core";
 
 export const novelsQueryKey = ["novels"] as const;
+export const novelDetailQueryKey = (slug: string) => ["novels", slug] as const;
 
-export const listNovels = createServerFn().handler(async (): Promise<Novel[]> => {
-  return listNovelRecords();
+const SlugSchema = z.object({ slug: z.string().min(1) });
+
+const listNovels = createServerFn().handler(async (): Promise<Novel[]> => {
+  return translatorService.listNovels();
 });
 
 export const createNovel = createServerFn({ method: "POST" })
   .validator(CreateNovelSchema)
   .handler(async ({ data }): Promise<Novel> => {
-    const { name, total_chapters, source_language, raw_text } = data;
-    const slug = toSlug(name);
-
-    // Friendly pre-check for the common duplicate case; the DB unique
-    // constraint on slug is the real guard (mapped below on the rare race).
-    const existing = await findNovelBySlug(slug);
-    if (existing) {
-      throw new Error(DUPLICATE_NOVEL_ERROR);
-    }
-
-    const timestamp = new Date().toISOString();
-    const record: NewNovelRecord = {
-      name,
-      slug,
-      source_language,
-      total_chapters,
-      status: "draft",
-      created_at: timestamp,
-      updated_at: timestamp,
-    };
-
-    // Upload the raw file before persisting: a failed insert must never leave
-    // a DB record pointing at a missing file. An orphaned object (insert
-    // failed after upload) is harmless - nothing references it.
-    await putNovelRawText(slug, raw_text);
-
-    try {
-      return await insertNovelRecord(record);
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        throw new Error(DUPLICATE_NOVEL_ERROR);
-      }
-      throw error;
-    }
+    return translatorService.createNovel(data);
   });
 
-/** SQLite reports unique violations as "UNIQUE constraint failed: <table>.<col>". */
-function isUniqueConstraintError(error: unknown): boolean {
-  return error instanceof Error && /unique constraint/i.test(error.message);
-}
+const getNovelDetail = createServerFn()
+  .validator(SlugSchema)
+  .handler(async ({ data }): Promise<NovelDetail> => {
+    await requireAuth();
+    const detail = await translatorService.getNovelDetail(data.slug);
+    if (!detail) {
+      throw new Error(NOVEL_NOT_FOUND_ERROR);
+    }
+    return detail;
+  });
+
+export const startParsing = createServerFn({ method: "POST" })
+  .validator(SlugSchema)
+  .handler(async ({ data }): Promise<Novel> => {
+    await requireAuth();
+    return translatorService.startParsing(data.slug);
+  });
 
 export function getNovelsQueryOptions() {
   return { queryFn: () => listNovels(), queryKey: novelsQueryKey };
+}
+
+export function getNovelDetailQueryOptions(slug: string) {
+  return { queryFn: () => getNovelDetail({ data: { slug } }), queryKey: novelDetailQueryKey(slug) };
 }

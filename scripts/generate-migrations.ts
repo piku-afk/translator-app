@@ -46,6 +46,21 @@ const DATA_KEYWORDS = new Set([
   "values",
 ]);
 
+/**
+ * Sole exception to the DDL-only rule: a data-
+ * preserving table rebuild - the only way to change a CHECK constraint in
+ * SQLite - needs one INSERT INTO ... SELECT copy of the old rows. Such a
+ * statement is accepted only when it carries an explicit
+ * `-- migration:data-copy` marker comment and is nothing but a copy:
+ * comments stripped, it must start with INSERT INTO and read via SELECT.
+ * Anything else data-shaped remains a loud build failure.
+ */
+function isMarkedDataCopy(statement: string): boolean {
+  if (!statement.includes("-- migration:data-copy")) return false;
+  const stripped = statement.replace(/^\s*--.*$/gm, "").trim();
+  return /^INSERT\s+INTO\s/i.test(stripped) && /\bSELECT\b/i.test(stripped);
+}
+
 function createCapturingDialect(migrationName: string) {
   const statements: string[] = [];
 
@@ -66,6 +81,11 @@ function createCapturingDialect(migrationName: string) {
             }
 
             if (kind === "RawNode") {
+              if (isMarkedDataCopy(sql)) {
+                statements.push(sql);
+                return { rows: [] };
+              }
+
               const firstWord = sql.split(/\s+/)[0]?.toLowerCase() ?? "";
               if (!DATA_KEYWORDS.has(firstWord)) {
                 statements.push(sql);
