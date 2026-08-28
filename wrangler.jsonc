@@ -13,20 +13,21 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "translator",
-      "database_id": "d13d5ac6-98c3-47c6-8370-99a93b687a6f",
+      "database_name": "translator-prod-db",
+      "database_id": "9f32cd7d-3f83-4126-9728-2aae56c86af5",
       "migrations_dir": "./d1-migrations",
     },
   ],
   "r2_buckets": [
     {
       "binding": "NOVELS_BUCKET",
-      "bucket_name": "translator-novels",
+      "bucket_name": "translator-prod-novels",
     },
   ],
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,
+    "redact_query_string": false,
     "logs": {
       "enabled": true,
       "head_sampling_rate": 1,

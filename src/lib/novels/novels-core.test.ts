@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  CreateNovelSchema,
-  rawFileKey,
-  toSlug,
-  type CreateNovelInput,
-} from "./novels-core";
+import { CreateNovelSchema, rawFileKey, toSlug, type CreateNovelInput } from "./novels-core";
 
 const validInput: CreateNovelInput = {
   name: "The Beginning",

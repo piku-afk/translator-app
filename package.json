@@ -1,8 +1,8 @@
 {
   "name": "translator-app",
   "version": "0.0.1",
-  "description": "Cloudflare stack (Workers, D1, R2, Queues) app that translates novels into English chapter by chapter",
   "private": true,
+  "description": "Cloudflare stack (Workers, D1, R2, Queues) app that translates novels into English chapter by chapter",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -17,11 +17,11 @@
     "build": "vite build",
     "start": "vite preview",
     "preview": "pnpm run build && vite preview",
-    "deploy": "pnpm cf-typegen && pnpm build && pnpm wrangler deploy",
+    "deploy": "pnpm cf:typegen && pnpm build && pnpm wrangler deploy",
     "db:typegen": "node scripts/generate-db-types.ts",
     "db:generate": "node scripts/generate-migrations.ts",
-    "db:migrate:local": "pnpm db:generate && wrangler d1 migrations apply translator --local && pnpm db:typegen",
-    "db:migrate:remote": "pnpm db:generate && wrangler d1 migrations apply translator --remote && pnpm db:typegen"
+    "db:migrate:local": "pnpm db:generate && wrangler d1 migrations apply translator-prod-db --local && pnpm db:typegen",
+    "db:migrate:remote": "pnpm db:generate && wrangler d1 migrations apply translator-prod-db --remote && pnpm db:typegen"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

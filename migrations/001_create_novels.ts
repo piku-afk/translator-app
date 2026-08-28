@@ -12,9 +12,12 @@ export async function up(db: Kysely<any>): Promise<void> {
     )
     .addColumn("total_chapters", "integer", (col) => col.notNull().check(sql`total_chapters > 0`))
     .addColumn("status", "text", (col) =>
-      col.notNull().defaultTo("draft").check(
-        sql`status IN ('draft', 'parsing', 'ready', 'needs review', 'extracting', 'translating', 'completed')`,
-      ),
+      col
+        .notNull()
+        .defaultTo("draft")
+        .check(
+          sql`status IN ('draft', 'parsing', 'ready', 'needs review', 'extracting', 'translating', 'completed')`,
+        ),
     )
     .addColumn("created_at", "text", (col) => col.notNull())
     .addColumn("updated_at", "text", (col) => col.notNull())

@@ -1,10 +1,10 @@
 import {
   Alert,
-  Container,
   FileInput,
   NumberInput,
   Select,
   Stack,
+  Text,
   TextInput,
   Title,
 } from "@mantine/core";
@@ -30,12 +30,12 @@ const FormSchema = z.object({
   raw_text: z.instanceof(File, { message: "Raw text file is required" }),
 });
 
-interface NewNovelFormValues {
+type NewNovelFormValues = {
   name: string;
   total_chapters: number | undefined;
   source_language: SourceLanguage | "";
   raw_text: File | null;
-}
+};
 
 export const Route = createFileRoute("/_app/novels/new")({
   component: function NewNovelPage() {
@@ -62,87 +62,86 @@ export const Route = createFileRoute("/_app/novels/new")({
     });
 
     return (
-      <Container component="main" className="py-10">
-        <Stack className="mx-auto w-full max-w-lg gap-6">
-          <Stack className="gap-1">
-            <Title order={2}>New Novel</Title>
-            <p className="text-sm text-muted-foreground">
-              Create a novel to start translating its chapters into English.
-            </p>
-          </Stack>
-
-          <form
-            onSubmit={form.onSubmit((values) => {
-              const total_chapters = values.total_chapters ?? 0;
-              void values.raw_text?.text().then((raw_text) => {
-                createNovelMutation.mutate({
-                  data: {
-                    name: values.name,
-                    total_chapters,
-                    source_language: values.source_language as SourceLanguage,
-                    raw_text,
-                  },
-                });
-              });
-            })}
-          >
-            <Stack className="gap-4">
-              <TextInput
-                label="Novel name"
-                placeholder="e.g. The Beginning"
-                classNames={{ label: "mb-2" }}
-                key={form.key("name")}
-                {...form.getInputProps("name")}
-              />
-
-              <NumberInput
-                label="Total chapters"
-                placeholder="e.g. 120"
-                min={1}
-                allowNegative={false}
-                classNames={{ label: "mb-2" }}
-                key={form.key("total_chapters")}
-                {...form.getInputProps("total_chapters")}
-              />
-
-              <Select
-                label="Source language"
-                placeholder="Select the language of the raw text"
-                data={SOURCE_LANGUAGE_OPTIONS}
-                allowDeselect={false}
-                classNames={{ label: "mb-2" }}
-                key={form.key("source_language")}
-                {...form.getInputProps("source_language")}
-              />
-
-              <FileInput
-                label="Raw text file"
-                placeholder="Upload the source text (.txt)"
-                accept=".txt,text/plain"
-                clearable
-                classNames={{ label: "mb-2" }}
-                key={form.key("raw_text")}
-                {...form.getInputProps("raw_text")}
-              />
-
-              <Button
-                type="submit"
-                loading={createNovelMutation.isPending}
-                loadingText="Creating…"
-                className="mt-2"
-              >
-                Create novel
-              </Button>
-            </Stack>
-          </form>
-
-          {createNovelMutation.error && (
-            <Alert variant="light" color="red" title="Could not create novel">
-              {getErrorMessage(createNovelMutation.error)}
-            </Alert>
-          )}
+      <Stack className="mx-auto w-full max-w-sm gap-6">
+        <Stack className="gap-1">
+          <Title order={2}>New Novel</Title>
+          <Text c="dimmed" className="text-sm">
+            Create a novel to start translating its chapters into English.
+          </Text>
         </Stack>
-      </Container>
+
+        <form
+          onSubmit={form.onSubmit((values) => {
+            const total_chapters = values.total_chapters ?? 0;
+            void values.raw_text?.text().then((raw_text) => {
+              createNovelMutation.mutate({
+                data: {
+                  name: values.name,
+                  total_chapters,
+                  source_language: values.source_language as SourceLanguage,
+                  raw_text,
+                },
+              });
+            });
+          })}
+        >
+          <Stack className="gap-6">
+            <TextInput
+              label="Novel name"
+              classNames={{ label: "mb-2" }}
+              placeholder="e.g. The Beginning"
+              key={form.key("name")}
+              {...form.getInputProps("name")}
+            />
+
+            <Select
+              allowDeselect={false}
+              label="Source language"
+              classNames={{ label: "mb-2" }}
+              placeholder="Select the language of the raw text"
+              data={SOURCE_LANGUAGE_OPTIONS}
+              key={form.key("source_language")}
+              {...form.getInputProps("source_language")}
+            />
+
+            <NumberInput
+              min={1}
+              hideControls
+              allowNegative={false}
+              placeholder="e.g. 120"
+              label="Total chapters"
+              classNames={{ label: "mb-2" }}
+              key={form.key("total_chapters")}
+              {...form.getInputProps("total_chapters")}
+            />
+
+            <FileInput
+              clearable
+              label="Raw text file"
+              accept=".txt,text/plain"
+              classNames={{ label: "mb-2" }}
+              placeholder="Upload the source text (.txt)"
+              key={form.key("raw_text")}
+              {...form.getInputProps("raw_text")}
+            />
+
+            <Button
+              type="submit"
+              className="mt-2"
+              loadingText="Creating"
+              loading={createNovelMutation.isPending}
+            >
+              Create novel
+            </Button>
+          </Stack>
+        </form>
+
+        {createNovelMutation.error && (
+          <Alert variant="light" color="red" title="Could not create novel">
+            {getErrorMessage(createNovelMutation.error)}
+          </Alert>
+        )}
+      </Stack>
     );
   },
 });

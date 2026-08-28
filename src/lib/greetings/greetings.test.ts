@@ -130,7 +130,13 @@ describe("selectGreeting", () => {
 
     // Sunday daytime in UTC.
     const sunday = selectGreeting(GREETING_MESSAGES, "UTC", new Date("2025-01-12T10:00:00Z"));
-    const sundayPool = [...GENERICS, "Good morning", "Happy Sunday", "Sunday session?", "Welcome to the weekend"];
+    const sundayPool = [
+      ...GENERICS,
+      "Good morning",
+      "Happy Sunday",
+      "Sunday session?",
+      "Welcome to the weekend",
+    ];
     expect(sundayPool).toContain(sunday);
   });
 

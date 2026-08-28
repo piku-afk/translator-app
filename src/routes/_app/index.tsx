@@ -1,4 +1,4 @@
-import { Button, Group, Stack } from "@mantine/core";
+import { Box, Button, Group, Stack, Title } from "@mantine/core";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Greeting, GreetingSkeleton } from "#/components/greeting";
 import { NovelList, NovelListSkeleton } from "#/components/novel-list";
@@ -10,7 +10,7 @@ import { Suspense } from "react";
 export const Route = createFileRoute("/_app/")({
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(getGreetingDataQueryOptions());
-    await context.queryClient.ensureQueryData(getNovelsQueryOptions());
+    context.queryClient.prefetchQuery(getNovelsQueryOptions());
   },
   component: function HomePage() {
     return (
@@ -20,16 +20,18 @@ export const Route = createFileRoute("/_app/")({
         </Suspense>
 
         {/* Your Novels */}
-        <section className="space-y-8">
+        <Box component="section" className="space-y-6">
           <Group className="justify-between">
-            <h2 className="text-xl font-medium text-foreground" aria-level={2}>
+            <Title order={2} className="text-xl font-medium text-foreground" aria-level={2}>
               Your Novels
-            </h2>
+            </Title>
             <Button
-              variant="filled"
+              variant="outline"
+              size="compact-md"
+              classNames={{ root: "h-7 hover:text-black", label: "gap-1 text-sm font-medium" }}
               renderRoot={(props) => <Link to="/novels/new" {...props} />}
             >
-              <Plus />
+              <Plus className="size-4" />
               New Novel
             </Button>
           </Group>
@@ -37,14 +39,14 @@ export const Route = createFileRoute("/_app/")({
           <Suspense fallback={<NovelListSkeleton />}>
             <NovelList />
           </Suspense>
-        </section>
+        </Box>
 
         {/* Recent Activity */}
-        <section className="space-y-6">
-          <h2 className="text-xl font-medium text-foreground" aria-level={2}>
+        <Box component="section" className="space-y-6">
+          <Title order={2} className="text-xl font-medium text-foreground" aria-level={2}>
             Recent Activity
-          </h2>
-        </section>
+          </Title>
+        </Box>
       </Stack>
     );
   },
