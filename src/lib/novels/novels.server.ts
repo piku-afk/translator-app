@@ -20,8 +20,6 @@ export async function findNovelBySlug(slug: string): Promise<Novel | undefined> 
 export async function insertNovelRecord(record: NewNovelRecord): Promise<Novel> {
   await db.insertInto("novels").values(record).execute();
 
-  // The row was just inserted, so it has an id; the generated type types the
-  // PK as nullable, so narrow it to the non-null `number` the domain expects.
   const row = await db
     .selectFrom("novels")
     .select("id")
@@ -30,7 +28,7 @@ export async function insertNovelRecord(record: NewNovelRecord): Promise<Novel> 
     .limit(1)
     .executeTakeFirstOrThrow();
 
-  return { ...record, id: row.id as number } as Novel; // id is present right after insert
+  return { ...record, id: row.id } as Novel;
 }
 
 /** Upload the raw source text into the novel's R2 namespace. */

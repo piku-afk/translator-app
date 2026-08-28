@@ -11,7 +11,7 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
 
 export interface Novels {
   created_at: string;
-  id: Generated<number | null>;
+  id: Generated<number>;
   name: string;
   slug: string;
   source_language: string;
