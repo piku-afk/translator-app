@@ -37,14 +37,8 @@ export function Header() {
             <CreditsBadge />
 
             <Tooltip withArrow label="Log out">
-              <ActionIcon
-                size="md"
-                variant="default"
-                className="w-8 h-8 [&_svg]:size-4"
-                loading={signingOut}
-                onClick={handleSignOut}
-              >
-                <LogOut />
+              <ActionIcon variant="default" loading={signingOut} onClick={handleSignOut}>
+                <LogOut className="size-4" />
               </ActionIcon>
             </Tooltip>
           </Group>

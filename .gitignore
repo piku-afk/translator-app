@@ -11,8 +11,11 @@ dist-ssr
 .wrangler
 .output
 .vinxi
+d1-migrations
 __unconfig*
 todos.json
 Thumbs.db
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+poc
+docs

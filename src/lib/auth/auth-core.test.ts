@@ -56,7 +56,11 @@ describe("sealSession / unsealSession", () => {
 
   it("rejects a token sealed with a different secret (forged/tampered)", async () => {
     const sealed = await sealSession({ secret: SECRET, ttlSeconds: 60, now: now() });
-    const outcome = await unsealSession({ secret: "other-secret-0987654321zyxw", sealed, now: now() });
+    const outcome = await unsealSession({
+      secret: "other-secret-0987654321zyxw",
+      sealed,
+      now: now(),
+    });
     expect(outcome).toEqual({ ok: false });
   });
 

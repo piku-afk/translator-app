@@ -1,26 +1,28 @@
-import type { Novel } from "#/lib/mock-data";
+import { sourceLanguageLabel, type Novel, type SourceLanguage } from "#/lib/novels/novels-core";
+import { Badge, Card, Group, Stack, Text, Title } from "@mantine/core";
 
 export function NovelCard({ novel }: { novel: Novel }) {
   return (
-    <article className="border rounded-md border-border p-4 hover:bg-card hover:border-black transition-colors cursor-pointer focus:outline-ring focus-visible:outline-2 focus-visible:outline-ring">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-medium text-foreground line-clamp-2">{novel.title}</h3>
-          <p className="mt-1 text-sm text-muted-foreground line-clamp-1">{novel.languagePair}</p>
-        </div>
-      </div>
-
-      <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Active</span>
-        </div>
-        <div className="text-right">
-          <p className="text-sm font-medium text-foreground">
-            {novel.currentChapter} / {novel.totalChapters} chapters
-          </p>
-          <p className="text-xs text-muted-foreground">{novel.lastUpdated}</p>
-        </div>
-      </div>
-    </article>
+    <Card
+      withBorder
+      className="p-4 bg-transparent hover:bg-white hover:border-black transition-colors cursor-pointer focus:outline-ring focus-visible:outline-2 focus-visible:outline-ring"
+    >
+      <Stack className="gap-4">
+        <Stack className="gap-1">
+          <Title order={3} className="text-base font-medium text-foreground line-clamp-2">
+            {novel.name}
+          </Title>
+          <Text c="dimmed" className="text-xs">
+            {sourceLanguageLabel(novel.source_language as SourceLanguage)} -&gt; English
+          </Text>
+        </Stack>
+        <Group className="items-center justify-between">
+          <Badge variant="default" size="xs">
+            {novel.status}
+          </Badge>
+          <Text className="text-xs font-medium">{novel.total_chapters} chapters</Text>
+        </Group>
+      </Stack>
+    </Card>
   );
 }

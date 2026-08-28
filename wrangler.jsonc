@@ -10,4 +10,34 @@
   "vars": {
     "SESSION_MAX_AGE_SECONDS": "86400", // 1 week
   },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "translator-prod-db",
+      "database_id": "9f32cd7d-3f83-4126-9728-2aae56c86af5",
+      "migrations_dir": "./d1-migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "NOVELS_BUCKET",
+      "bucket_name": "translator-prod-novels",
+    },
+  ],
+  "observability": {
+    "enabled": false,
+    "head_sampling_rate": 1,
+    "redact_query_string": false,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "persist": true,
+      "invocation_logs": true,
+    },
+    "traces": {
+      "enabled": true,
+      "persist": true,
+      "head_sampling_rate": 1,
+    },
+  },
 }

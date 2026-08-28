@@ -28,7 +28,7 @@ export const Route = createFileRoute("/_app")({
       <AppShell header={{ height: 60 }} padding="md">
         <Header />
         <AppShell.Main>
-          <Container strategy="grid" className="py-6">
+          <Container strategy="grid" className="py-10">
             <Outlet />
           </Container>
         </AppShell.Main>

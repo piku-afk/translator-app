@@ -18,11 +18,10 @@ export function CreditsBadge() {
       label={credits.error ? getErrorMessage(credits.error) : "Remaining credits"}
     >
       <Badge
-        size="xl"
         variant={credits.error ? "outline" : "default"}
         color={credits.error ? "red" : undefined}
         leftSection={<Coins className="size-4" />}
-        className="rounded-md font-medium text-sm normal-case gap-2 select-none"
+        className="rounded-md h-7 font-medium text-sm normal-case gap-2 select-none"
       >
         {credits.isPending ? (
           <Skeleton className="w-16 h-5" />
