@@ -10,7 +10,7 @@ import { translatorService } from "./lib/translator/translator.server";
  */
 type CfRequest = Request & { cf?: { timezone?: string } };
 
-export default createServerEntry({
+const server = createServerEntry({
   fetch(incomingRequest) {
     const url = new URL(incomingRequest.url);
     const request = new Request(url, incomingRequest);
@@ -27,19 +27,23 @@ export default createServerEntry({
   },
 });
 
-/**
- * Parse-queue consumer. The service returns a settlement per
- * message: it has either finished the work ("ack" - including a finalized
- * novel on retry exhaustion, see runParseJob) or asked for another attempt
- * ("retry").
- */
-export async function queue(batch: MessageBatch<ParseJobMessage>): Promise<void> {
-  for (const message of batch.messages) {
-    const settlement = await translatorService.runParseJob(message.body, message.attempts);
-    if (settlement.outcome === "retry") {
-      message.retry();
-    } else {
-      message.ack();
+export default {
+  fetch: server.fetch,
+
+  /**
+   * Parse-queue consumer. The service returns a settlement per
+   * message: it has either finished the work ("ack" - including a finalized
+   * novel on retry exhaustion, see runParseJob) or asked for another attempt
+   * ("retry").
+   */
+  async queue(batch: MessageBatch<ParseJobMessage>): Promise<void> {
+    for (const message of batch.messages) {
+      const settlement = await translatorService.runParseJob(message.body, message.attempts);
+      if (settlement.outcome === "retry") {
+        message.retry();
+      } else {
+        message.ack();
+      }
     }
-  }
-}
+  },
+};
