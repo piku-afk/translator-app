@@ -24,6 +24,24 @@
       "bucket_name": "translator-prod-novels",
     },
   ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "PARSE_QUEUE",
+        "queue": "translator-parse-queue",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "translator-parse-queue",
+        // Must match PARSE_MAX_RETRIES in src/lib/translator/service.ts: the
+        // consumer treats a message on that attempt as exhausted and moves the
+        // novel to `failed` instead of retrying again.
+        "max_retries": 3,
+        "dead_letter_queue": "translator-parse-dlq",
+      },
+    ],
+  },
   "observability": {
     "enabled": false,
     "head_sampling_rate": 1,
