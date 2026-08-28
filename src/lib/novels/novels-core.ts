@@ -26,6 +26,7 @@ export const NOVEL_STATUSES = [
   "parsing",
   "ready",
   "needs review",
+  "failed",
   "extracting",
   "translating",
   "completed",
@@ -69,6 +70,11 @@ export function toSlug(name: string): string {
 /** The R2 key for a novel's uploaded raw source text. */
 export function rawFileKey(slug: string): string {
   return `novels/${slug}/raw`;
+}
+
+/** The R2 key for a parsed chapter file within the novel's namespace. */
+export function chapterFileKey(slug: string, number: number): string {
+  return `novels/${slug}/chapters/${number}.txt`;
 }
 
 export const INVALID_NOVEL_INPUT_ERROR = "Invalid novel input";
