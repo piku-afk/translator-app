@@ -1,4 +1,6 @@
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
+import type { ParseJobMessage } from "./lib/translator/ports";
+import { translatorService } from "./lib/translator/translator.server";
 
 /**
  * Cloudflare augments the incoming worker request with a `cf` object (see
@@ -24,3 +26,20 @@ export default createServerEntry({
     return handler.fetch(request);
   },
 });
+
+/**
+ * Parse-queue consumer (ADR-0005). The service returns a settlement per
+ * message: it has either finished the work ("ack" - including a finalized
+ * novel on retry exhaustion, see runParseJob) or asked for another attempt
+ * ("retry").
+ */
+export async function queue(batch: MessageBatch<ParseJobMessage>): Promise<void> {
+  for (const message of batch.messages) {
+    const settlement = await translatorService.runParseJob(message.body, message.attempts);
+    if (settlement.outcome === "retry") {
+      message.retry();
+    } else {
+      message.ack();
+    }
+  }
+}
