@@ -6,7 +6,27 @@
  * wires these into the server function and applies auth.
  */
 
-import type { DayBucket, GreetingMessage, TimeBucket } from "./greeting-messages";
+/** Time-of-day bucket used to scope a greeting. */
+export type TimeBucket = "night" | "morning" | "afternoon" | "evening";
+
+/** Day-of-week bucket used to scope a greeting. */
+export type DayBucket = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+
+/** A greeting as the selection logic sees it (framework-free shape). */
+export interface GreetingMessage {
+  /** The full greeting text, rendered with no name appended. */
+  message: string;
+  /**
+   * Comma-separated time-of-day buckets in which this greeting is valid
+   * (e.g. `"morning"`, `"night"`). NULL / empty = any time.
+   */
+  time?: string | null;
+  /**
+   * Comma-separated day-of-week buckets in which this greeting is valid
+   * (e.g. `"mon"`, `"sat,sun"`). NULL / empty = any day.
+   */
+  days?: string | null;
+}
 
 /**
  * Static subtext shown beneath the greeting.
@@ -72,13 +92,30 @@ export function getDayInTimezone(timeZone: string, at: Date): DayBucket {
 }
 
 /**
+ * True when `bucket` is one of the comma-separated buckets in `scoped`.
+ * NULL / undefined / empty means "any" (unscoped) and always matches.
+ */
+function bucketMatches(scoped: string | null | undefined, bucket: string): boolean {
+  if (scoped == null || scoped.trim() === "") return true;
+  return scoped.split(",").some((part) => part.trim() === bucket);
+}
+
+/**
+ * Fallback shown when no greeting is valid for the current moment. The
+ * Operator can delete every greeting that matches right now; the home page
+ * must still render.
+ */
+export const FALLBACK_GREETING = "Welcome";
+
+/**
  * Picks one greeting from `messages` that is valid at the local time-of-day
  * bucket and day-of-week of `at` in `timeZone`, chosen by `random`.
  *
  * A message is a candidate when its declared time buckets include the current
  * time bucket AND its declared day buckets include the current day. Messages
- * with no tags (generic greetings) are always candidates, so the pool is never
- * empty for the canonical list.
+ * with no tags (generic greetings) are always candidates, so the pool is
+ * normally non-empty. If every greeting is scoped away (or the pool is empty),
+ * `FALLBACK_GREETING` is returned so the page never crashes.
  */
 export function selectGreeting(
   messages: readonly GreetingMessage[],
@@ -89,10 +126,9 @@ export function selectGreeting(
   const bucket = getTimeBucket(getHourInTimezone(timeZone, at));
   const day = getDayInTimezone(timeZone, at);
   const candidates = messages.filter(
-    (m) =>
-      (m.time === undefined || m.time.includes(bucket)) &&
-      (m.days === undefined || m.days.includes(day)),
+    (m) => bucketMatches(m.time, bucket) && bucketMatches(m.days, day),
   );
+  if (candidates.length === 0) return FALLBACK_GREETING;
   const index = Math.floor(random() * candidates.length);
   return candidates[index].message;
 }

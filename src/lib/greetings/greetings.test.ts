@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  FALLBACK_GREETING,
   getDayInTimezone,
   getHourInTimezone,
   getSubtext,
   getTimeBucket,
   selectGreeting,
+  type GreetingMessage,
 } from "./greetings-core";
-import { GREETING_MESSAGES, type GreetingMessage } from "./greeting-messages";
 
 describe("getHourInTimezone", () => {
   it("reads the local hour in the given timezone", () => {
@@ -74,78 +75,64 @@ describe("getDayInTimezone", () => {
 });
 
 describe("selectGreeting", () => {
-  // Messages with no tags: valid at any time, on any day (see greeting-messages).
-  const GENERICS = [
-    "Back at it!",
-    "Hey there",
-    "Hi, how are you?",
-    "How's it going?",
-    "Welcome",
-    "What's new?",
-    "What's on your mind?",
-  ];
-
   it("returns a message from the correct filtered pool for a timezone and instant", () => {
-    // Monday morning in UTC.
-    const mondayMorning = selectGreeting(
-      GREETING_MESSAGES,
-      "UTC",
-      new Date("2025-01-06T09:00:00Z"),
-    );
-    const mondayMorningPool = [...GENERICS, "Good morning", "Happy Monday"];
-    expect(mondayMorningPool).toContain(mondayMorning);
-
-    // Friday evening in UTC.
-    const fridayEvening = selectGreeting(
-      GREETING_MESSAGES,
-      "UTC",
-      new Date("2025-01-10T19:00:00Z"),
-    );
-    const fridayEveningPool = [
-      ...GENERICS,
-      "Evening",
-      "Good evening",
-      "How was your day?",
-      "Evening, how are things?",
-      "Happy Friday",
-      "That Friday feeling",
+    // A small fixture: the logic must not depend on the full seeded dataset.
+    const messages: GreetingMessage[] = [
+      { message: "generic" },
+      { message: "Good morning", time: "morning" },
+      { message: "Happy Monday", days: "mon" },
+      { message: "Hello, night owl", time: "night" },
+      { message: "Happy Saturday!", days: "sat" },
     ];
-    expect(fridayEveningPool).toContain(fridayEvening);
 
-    // Saturday night in UTC.
-    const saturdayNight = selectGreeting(
-      GREETING_MESSAGES,
-      "UTC",
-      new Date("2025-01-11T23:30:00Z"),
-    );
-    const saturdayNightPool = [
-      ...GENERICS,
-      "Hello, night owl",
-      "What's on your mind tonight?",
-      "Up late?",
-      "Happy Saturday!",
-      "Welcome to the weekend",
-    ];
-    expect(saturdayNightPool).toContain(saturdayNight);
+    // Monday morning in UTC: generic + morning + monday.
+    const mondayMorning = selectGreeting(messages, "UTC", new Date("2025-01-06T09:00:00Z"));
+    expect(["generic", "Good morning", "Happy Monday"]).toContain(mondayMorning);
 
-    // Sunday daytime in UTC.
-    const sunday = selectGreeting(GREETING_MESSAGES, "UTC", new Date("2025-01-12T10:00:00Z"));
-    const sundayPool = [
-      ...GENERICS,
-      "Good morning",
-      "Happy Sunday",
-      "Sunday session?",
-      "Welcome to the weekend",
+    // Saturday night in UTC: generic + night + saturday.
+    const saturdayNight = selectGreeting(messages, "UTC", new Date("2025-01-11T23:30:00Z"));
+    expect(["generic", "Hello, night owl", "Happy Saturday!"]).toContain(saturdayNight);
+  });
+
+  it("matches comma-separated bucket lists directly", () => {
+    const at = new Date("2025-01-11T23:30:00Z"); // Saturday night UTC.
+    const multi: GreetingMessage[] = [
+      { message: "weekend nights", days: "sat,sun", time: "night" },
+      { message: "not here", days: "mon", time: "morning" },
     ];
-    expect(sundayPool).toContain(sunday);
+    expect(selectGreeting(multi, "UTC", at, () => 0)).toBe("weekend nights");
+
+    // A typo'd bucket never matches, degrading to the fallback instead of crashing.
+    const typo: GreetingMessage[] = [{ message: "mornign", time: "mornign" }];
+    expect(selectGreeting(typo, "UTC", at)).toBe(FALLBACK_GREETING);
+  });
+
+  it("treats NULL and empty bucket strings as any time / any day", () => {
+    const at = new Date("2025-01-06T09:00:00Z"); // Monday morning UTC.
+    const nulls: GreetingMessage[] = [{ message: "A", time: null, days: null }];
+    const empty: GreetingMessage[] = [{ message: "B", time: "", days: "" }];
+    const blanks: GreetingMessage[] = [{ message: "C", time: "   ", days: "   " }];
+
+    expect(selectGreeting(nulls, "UTC", at, () => 0)).toBe("A");
+    expect(selectGreeting(empty, "UTC", at, () => 0)).toBe("B");
+    expect(selectGreeting(blanks, "UTC", at, () => 0)).toBe("C");
+  });
+
+  it("tolerates whitespace around comma-separated buckets (dashboard hand-edits)", () => {
+    const at = new Date("2025-01-06T09:00:00Z"); // Monday morning UTC.
+    const ragged: GreetingMessage[] = [
+      { message: "mon tue", days: " mon , tue " },
+      { message: "morning", time: " morning " },
+    ];
+    expect(selectGreeting(ragged, "UTC", at, () => 0)).toBe("mon tue");
   });
 
   it("respects bucket boundaries", () => {
     const timeOnly: GreetingMessage[] = [
-      { message: "night", time: ["night"] },
-      { message: "morning", time: ["morning"] },
-      { message: "afternoon", time: ["afternoon"] },
-      { message: "evening", time: ["evening"] },
+      { message: "night", time: "night" },
+      { message: "morning", time: "morning" },
+      { message: "afternoon", time: "afternoon" },
+      { message: "evening", time: "evening" },
     ];
     const pick = (hour: number) =>
       selectGreeting(timeOnly, "UTC", new Date(Date.UTC(2025, 0, 6, hour)), () => 0);
@@ -163,22 +150,37 @@ describe("selectGreeting", () => {
   });
 
   it("picks a candidate by the injected random source", () => {
-    const messages = [{ message: "A" }, { message: "B" }, { message: "C" }];
+    const messages: GreetingMessage[] = [{ message: "A" }, { message: "B" }, { message: "C" }];
     const at = new Date("2025-01-06T09:00:00Z");
     expect(selectGreeting(messages, "UTC", at, () => 0)).toBe("A");
     expect(selectGreeting(messages, "UTC", at, () => 0.5)).toBe("B");
     expect(selectGreeting(messages, "UTC", at, () => 0.999)).toBe("C");
   });
 
-  it("guarantees a non-empty candidate pool for every hour and day", () => {
-    // 2025-01-06 is a Monday; walk a full week in UTC.
+  it("keeps the pool non-empty at every hour and day when a generic is present", () => {
+    // A single generic greeting (no buckets) is valid at any time on any day,
+    // so the pool never empties. Full-dataset coverage is the seed's job (the
+    // source of truth is the db), not a unit-test concern.
+    const messages: GreetingMessage[] = [{ message: "generic" }];
     for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
       for (let hour = 0; hour < 24; hour++) {
         const at = new Date(Date.UTC(2025, 0, 6 + dayOffset, hour));
-        const greeting = selectGreeting(GREETING_MESSAGES, "UTC", at, () => 0);
-        expect(greeting).toBeTruthy();
-        expect(GREETING_MESSAGES.some((m) => m.message === greeting)).toBe(true);
+        expect(selectGreeting(messages, "UTC", at, () => 0)).toBe("generic");
       }
     }
+  });
+
+  it("returns the fallback when the candidate pool is empty", () => {
+    const at = new Date("2025-01-06T09:00:00Z"); // Monday morning UTC.
+
+    // No messages at all.
+    expect(selectGreeting([], "UTC", at)).toBe(FALLBACK_GREETING);
+
+    // Only messages scoped away from the current moment.
+    const scopedAway: GreetingMessage[] = [
+      { message: "night only", time: "night" },
+      { message: "saturday only", days: "sat" },
+    ];
+    expect(selectGreeting(scopedAway, "UTC", at)).toBe(FALLBACK_GREETING);
   });
 });
