@@ -181,7 +181,7 @@ describe("startParsing", () => {
     const { db, parseQueue, service } = await makeService();
     const novel = await seedNovel(db);
 
-    const updated = await service.startParsing(novel.id);
+    const updated = await service.startParsing(novel.slug);
 
     expect(updated.status).toBe("parsing");
     expect(parseQueue.jobs).toEqual([{ novelId: novel.id }]);
@@ -191,7 +191,7 @@ describe("startParsing", () => {
     const { db, parseQueue, service } = await makeService();
     const novel = await seedNovel(db, { status: "failed", last_error: "boom" });
 
-    const updated = await service.startParsing(novel.id);
+    const updated = await service.startParsing(novel.slug);
 
     expect(updated.status).toBe("parsing");
     expect(parseQueue.jobs).toEqual([{ novelId: novel.id }]);
@@ -201,7 +201,7 @@ describe("startParsing", () => {
     const { db, service } = await makeService();
     const novel = await seedNovel(db, { status: "ready" });
 
-    await expect(service.startParsing(novel.id)).rejects.toThrow(
+    await expect(service.startParsing(novel.slug)).rejects.toThrow(
       'Only draft or failed novels can start parsing (currently "ready")',
     );
   });
@@ -209,7 +209,7 @@ describe("startParsing", () => {
   it("rejects an unknown novel", async () => {
     const { service } = await makeService();
 
-    await expect(service.startParsing(1234)).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
+    await expect(service.startParsing("missing")).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
   });
 
   it("reverts to draft when the enqueue fails", async () => {
@@ -217,7 +217,7 @@ describe("startParsing", () => {
     const novel = await seedNovel(db, { status: "failed", last_error: "boom" });
     parseQueue.setFailing(true);
 
-    await expect(service.startParsing(novel.id)).rejects.toThrow("queue unavailable");
+    await expect(service.startParsing(novel.slug)).rejects.toThrow("queue unavailable");
 
     const reverted = await refetchNovel(db, novel.id);
     expect(reverted.status).toBe("draft");

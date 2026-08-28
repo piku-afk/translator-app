@@ -10,7 +10,7 @@ export const novelDetailQueryKey = (slug: string) => ["novels", slug] as const;
 
 const SlugSchema = z.object({ slug: z.string().min(1) });
 
-export const listNovels = createServerFn().handler(async (): Promise<Novel[]> => {
+const listNovels = createServerFn().handler(async (): Promise<Novel[]> => {
   return translatorService.listNovels();
 });
 
@@ -20,7 +20,7 @@ export const createNovel = createServerFn({ method: "POST" })
     return translatorService.createNovel(data);
   });
 
-export const getNovelDetail = createServerFn()
+const getNovelDetail = createServerFn()
   .validator(SlugSchema)
   .handler(async ({ data }): Promise<NovelDetail> => {
     await requireAuth();
@@ -35,11 +35,7 @@ export const startParsing = createServerFn({ method: "POST" })
   .validator(SlugSchema)
   .handler(async ({ data }): Promise<Novel> => {
     await requireAuth();
-    const novel = await translatorService.findNovelBySlug(data.slug);
-    if (!novel) {
-      throw new Error(NOVEL_NOT_FOUND_ERROR);
-    }
-    return translatorService.startParsing(novel.id);
+    return translatorService.startParsing(data.slug);
   });
 
 export function getNovelsQueryOptions() {

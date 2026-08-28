@@ -40,7 +40,7 @@ export interface TranslatorService {
   getNovelDetail(slug: string): Promise<NovelDetail | undefined>;
   createNovel(input: CreateNovelInput): Promise<Novel>;
   /** Explicit, operator-only parse start (never automatic). */
-  startParsing(novelId: number): Promise<Novel>;
+  startParsing(slug: string): Promise<Novel>;
   /** One parse-queue consumer invocation for a single message. */
   runParseJob(job: ParseJobMessage, attempt: number): Promise<ParseSettlement>;
 }
@@ -80,15 +80,18 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     await ports.storage.put(rawFileKey(slug), raw_text);
 
     try {
-      await db.insertInto("novels").values({
-        name,
-        slug,
-        source_language,
-        total_chapters,
-        status: "draft",
-        created_at: timestamp,
-        updated_at: timestamp,
-      }).execute();
+      await db
+        .insertInto("novels")
+        .values({
+          name,
+          slug,
+          source_language,
+          total_chapters,
+          status: "draft",
+          created_at: timestamp,
+          updated_at: timestamp,
+        })
+        .execute();
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         throw new Error(DUPLICATE_NOVEL_ERROR);
@@ -102,10 +105,8 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       .where("slug", "=", slug)
       .orderBy("id", "desc")
       .limit(1)
-      .executeTakeFirstOrThrow()) as Novel;
+      .executeTakeFirstOrThrow()) satisfies Novel;
   }
-
-  return { listNovels, findNovelBySlug, getNovelDetail, createNovel, startParsing, runParseJob };
 
   async function findNovelById(novelId: number): Promise<Novel | undefined> {
     return db.selectFrom("novels").selectAll().where("id", "=", novelId).executeTakeFirst();
@@ -128,11 +129,13 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       .execute();
   }
 
-  async function startParsing(novelId: number): Promise<Novel> {
-    const novel = await findNovelById(novelId);
+  async function startParsing(slug: string): Promise<Novel> {
+    const novel = await findNovelBySlug(slug);
+
     if (!novel) {
       throw new Error(NOVEL_NOT_FOUND_ERROR);
     }
+
     if (novel.status !== "draft" && novel.status !== "failed") {
       throw new Error(
         `Only draft or failed novels can start parsing (currently "${novel.status}")`,
@@ -140,6 +143,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     }
 
     await setNovelStatus(novel.id, "parsing");
+
     try {
       await ports.parseQueue.enqueue({ novelId: novel.id });
     } catch (error) {
@@ -150,20 +154,25 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       throw error;
     }
 
+    // Refetch: the caller expects the novel as it is now (status "parsing"),
+    // not the row as it was read before the update.
     return (await findNovelById(novel.id))!;
   }
 
   async function runParseJob(job: ParseJobMessage, attempt: number): Promise<ParseSettlement> {
     const novel = await findNovelById(job.novelId);
+
     if (!novel) {
       return { outcome: "ack" }; // novel gone: nothing left to finalize
     }
+
     if (novel.status !== "parsing") {
       return { outcome: "ack" }; // stale/duplicate message: the novel moved on
     }
 
     try {
       const rawText = await ports.storage.get(rawFileKey(novel.slug));
+
       if (rawText === null) {
         throw new Error(`Raw file missing on storage for novel "${novel.slug}"`);
       }
@@ -179,6 +188,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       // a crash mid-way retries the whole job, which self-heals here.
       const timestamp = new Date().toISOString();
       await db.deleteFrom("chapters").where("novel_id", "=", novel.id).execute();
+
       if (chapters.length > 0) {
         await db
           .insertInto("chapters")
@@ -223,6 +233,8 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       .executeTakeFirst();
     return { novel, chapter_count: Number(row?.chapter_count ?? 0) };
   }
+
+  return { listNovels, findNovelBySlug, getNovelDetail, createNovel, startParsing, runParseJob };
 }
 
 /** SQLite reports unique violations as "UNIQUE constraint failed: <table>.<col>". */
