@@ -1,7 +1,9 @@
 import {
   Alert,
-  FileInput,
+  Button,
+  CloseButton,
   Group,
+  Input,
   Modal,
   NumberInput,
   Select,
@@ -10,11 +12,12 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
+import { Dropzone } from "@mantine/dropzone";
 import { schemaResolver, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check, Upload, X } from "lucide-react";
 import { z } from "zod";
-import { Button } from "#/components/ui/button";
 import { createNovel, novelsQueryKey } from "#/lib/novels/novels";
 import {
   NovelNameSchema,
@@ -26,6 +29,13 @@ import {
 import { getErrorMessage } from "#/lib/utils";
 
 export const CREATE_NOVEL_MODAL = "create-novel";
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 type NewNovelFormValues = {
   name: string;
@@ -51,11 +61,13 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
       notifications.show({
         title: "Novel created",
         message: `"${data.name}" is ready`,
-        position: "top-center",
+        color: "green",
       });
       await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
     },
   });
+
+  const isPending = createNovelMutation.isPending;
 
   const form = useForm<NewNovelFormValues>({
     mode: "uncontrolled",
@@ -66,9 +78,8 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
       raw_text: null,
     },
     validate: schemaResolver(FormSchema),
+    enhanceGetInputProps: () => ({ disabled: isPending }),
   });
-
-  const isPending = createNovelMutation.isPending;
 
   return (
     <Modal
@@ -140,19 +151,71 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
             />
           </SimpleGrid>
 
-          <FileInput
-            clearable
+          <Input.Wrapper
             label="Raw text file"
-            accept=".txt,text/plain"
-            classNames={{ label: "mb-1" }}
-            placeholder="Upload the source text (.txt)"
-            key={form.key("raw_text")}
-            {...form.getInputProps("raw_text")}
-          />
+            error={form.errors.raw_text}
+            classNames={{ label: "mb-2", error: "mt-1.25" }}
+          >
+            <Dropzone
+              multiple={false}
+              accept={["text/plain"]}
+              p={form.values.raw_text ? "sm" : "lg"}
+              disabled={isPending}
+              enablePointerEvents
+              onDrop={(files) => {
+                form.setFieldValue("raw_text", files[0] ?? null);
+                form.validateField("raw_text");
+              }}
+              onReject={() => form.setFieldError("raw_text", "Only .txt files are accepted")}
+            >
+              {form.values.raw_text ? (
+                <Group justify="space-between" wrap="nowrap" gap="sm">
+                  <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+                    <Check size={16} style={{ flexShrink: 0 }} aria-hidden />
+                    <Text size="sm" truncate style={{ minWidth: 0 }}>
+                      {form.values.raw_text.name}
+                    </Text>
+                  </Group>
+                  <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+                    <Text size="sm" c="dimmed" visibleFrom="sm">
+                      {formatFileSize(form.values.raw_text.size)}
+                    </Text>
+                    <CloseButton
+                      size="sm"
+                      aria-label={`Remove ${form.values.raw_text.name}`}
+                      disabled={isPending}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        form.setFieldValue("raw_text", null);
+                        form.clearFieldError("raw_text");
+                      }}
+                    />
+                  </Group>
+                </Group>
+              ) : (
+                <Stack align="center" gap="xs">
+                  <Dropzone.Accept>
+                    <Upload size={24} aria-hidden />
+                  </Dropzone.Accept>
+                  <Dropzone.Reject>
+                    <X size={24} aria-hidden />
+                  </Dropzone.Reject>
+                  <Dropzone.Idle>
+                    <Upload size={24} aria-hidden />
+                  </Dropzone.Idle>
+                  <Text size="sm" c="dimmed">
+                    Drag your .txt file here or click to browse
+                  </Text>
+                </Stack>
+              )}
+            </Dropzone>
+          </Input.Wrapper>
 
           <Group className="mt-2 justify-end">
-            <Button onClick={onClose}>Cancel</Button>
-            <Button type="submit" loadingText="Creating" loading={isPending}>
+            <Button variant="default" disabled={isPending} onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="default" type="submit" loading={isPending}>
               Create novel
             </Button>
           </Group>

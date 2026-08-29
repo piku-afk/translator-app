@@ -10,6 +10,7 @@ import { theme } from "#/lib/mantine-theme";
 import favicon from "#/assets/favicon.svg";
 
 import "@mantine/core/styles.layer.css";
+import "@mantine/dropzone/styles.layer.css";
 import "@mantine/notifications/styles.layer.css";
 import appCss from "../styles.css?url";
 

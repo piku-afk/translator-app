@@ -42,13 +42,17 @@ async function fillValidForm() {
   fireEvent.click(screen.getByRole("combobox"));
   fireEvent.click(await screen.findByRole("option", { name: "Korean" }));
 
-  // Mantine's FileInput renders the real <input type="file"> as a hidden
-  // sibling of the labelled button, so it has no accessible name of its own.
+  // The Dropzone renders a hidden <input type="file"> with no accessible
+  // name of its own, so we drive it directly.
   const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
   expect(fileInput).toBeTruthy();
   fireEvent.change(fileInput!, {
     target: { files: [new File(["1화.\n첫 문장입니다."], "raw.txt", { type: "text/plain" })] },
   });
+
+  // Dropping a file validates the field immediately, so wait for the
+  // selected-state chip to render before submitting.
+  await screen.findByText("raw.txt");
 }
 
 beforeEach(() => {
@@ -67,8 +71,58 @@ describe("NewNovelModal", () => {
     expect(screen.getByLabelText("Novel name")).toBeTruthy();
     expect(screen.getByRole("combobox")).toBeTruthy();
     expect(screen.getByLabelText("Total chapters")).toBeTruthy();
-    expect(screen.getByLabelText("Raw text file")).toBeTruthy();
+    expect(screen.getByText("Raw text file")).toBeTruthy();
+    expect(screen.getByText("Drag your .txt file here or click to browse")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Create novel" })).toBeTruthy();
+  });
+
+  it("shows the selected file chip and clears it via the remove button", async () => {
+    renderModal();
+
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput).toBeTruthy();
+
+    // The remove button lives inside the Dropzone, whose inner wrapper disables
+    // pointer events by default; without `enablePointerEvents` clicks on it
+    // pass through to the Dropzone root and open the file picker instead.
+    const dropzoneInner = document.querySelector<HTMLElement>(
+      ".mantine-Dropzone-root [data-enable-pointer-events]",
+    );
+    expect(dropzoneInner).toBeTruthy();
+
+    // Guard against the remove click bubbling into the Dropzone and opening
+    // the file picker.
+    const inputClickSpy = vi.fn();
+    fileInput!.addEventListener("click", inputClickSpy);
+
+    fireEvent.change(fileInput!, {
+      target: {
+        files: [new File(["a".repeat(2500)], "raw.txt", { type: "text/plain" })],
+      },
+    });
+
+    expect(await screen.findByText("raw.txt")).toBeTruthy();
+    expect(screen.getByText("2.4 KB")).toBeTruthy();
+    expect(screen.queryByText("Drag your .txt file here or click to browse")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove raw.txt" }));
+
+    expect(screen.getByText("Drag your .txt file here or click to browse")).toBeTruthy();
+    expect(screen.queryByText("raw.txt")).toBeNull();
+    expect(inputClickSpy).not.toHaveBeenCalled();
+  });
+
+  it("shows an inline error when a non-txt file is dropped", async () => {
+    renderModal();
+
+    const fileInput = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(fileInput).toBeTruthy();
+    fireEvent.change(fileInput!, {
+      target: { files: [new File(["%PDF"], "raw.pdf", { type: "application/pdf" })] },
+    });
+
+    expect(await screen.findByText("Only .txt files are accepted")).toBeTruthy();
+    expect(screen.queryByText("raw.pdf")).toBeNull();
   });
 
   it("submits the raw text and shows a top-center toast on success", async () => {
@@ -107,7 +161,6 @@ describe("NewNovelModal", () => {
         expect.objectContaining({
           title: "Novel created",
           message: '"The Beginning" is ready',
-          position: "top-center",
         }),
       );
     });
