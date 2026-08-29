@@ -165,6 +165,35 @@ describe("listNovels", () => {
 
     expect(novels.map((n) => n.slug)).toEqual(["newer", "older"]);
   });
+
+  it("includes each novel's parsed chapter count, zero when unparsed", async () => {
+    const { db, service } = await makeService();
+    const parsed = await seedNovel(db, { slug: "parsed" });
+    await seedChapter(db, parsed.id, 1);
+    await seedChapter(db, parsed.id, 2);
+    await seedNovel(db, { slug: "unparsed" });
+
+    const novels = await service.listNovels();
+
+    expect(novels.map((n) => [n.slug, n.parsed_chapters])).toEqual([
+      ["unparsed", 0],
+      ["parsed", 2],
+    ]);
+  });
+});
+
+describe("listRecentNovels", () => {
+  it("returns the three most recently updated novels with parsed counts", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { slug: "recent" });
+    await seedChapter(db, novel.id, 1);
+    await seedNovel(db, { slug: "older", updated_at: "2026-01-01T00:00:00.000Z" });
+
+    const novels = await service.listRecentNovels();
+
+    expect(novels.map((n) => n.slug)).toEqual(["recent", "older"]);
+    expect(novels.map((n) => n.parsed_chapters)).toEqual([1, 0]);
+  });
 });
 
 describe("findNovelBySlug", () => {

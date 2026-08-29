@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAuth } from "#/lib/auth/session.server";
-import { NOVEL_NOT_FOUND_ERROR, type NovelDetail } from "../translator/service";
+import { NOVEL_NOT_FOUND_ERROR, type NovelDetail, type NovelSummary } from "../translator/service";
 import { translatorService } from "../translator/translator.server";
 import { CreateNovelSchema, type Novel } from "./novels-core";
 
@@ -11,11 +11,11 @@ export const novelDetailQueryKey = (slug: string) => ["novels", slug] as const;
 
 const SlugSchema = z.object({ slug: z.string().min(1) });
 
-const listNovels = createServerFn().handler(async (): Promise<Novel[]> => {
+const listNovels = createServerFn().handler(async (): Promise<NovelSummary[]> => {
   return translatorService.listNovels();
 });
 
-const listRecentNovels = createServerFn().handler(async (): Promise<Novel[]> => {
+const listRecentNovels = createServerFn().handler(async (): Promise<NovelSummary[]> => {
   return translatorService.listRecentNovels();
 });
 
