@@ -8,7 +8,9 @@ export function NewNovelButton() {
       variant="outline"
       size="compact-md"
       classNames={{ root: "h-7 hover:text-black", label: "gap-1 text-sm font-medium" }}
-      renderRoot={(props) => <Link to="/novels/new" {...props} />}
+      renderRoot={(props) => (
+        <Link to="." search={(prev) => ({ ...prev, modal: "create-novel" as const })} {...props} />
+      )}
     >
       <Plus className="size-4" />
       New Novel
