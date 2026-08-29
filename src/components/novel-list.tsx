@@ -1,8 +1,9 @@
-import { Text } from "@mantine/core";
+import { Stack, Text } from "@mantine/core";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { getNovelsQueryOptions } from "#/lib/novels/novels";
+import { getRecentNovelsQueryOptions } from "#/lib/novels/novels";
 import { NovelCard } from "./novel-card";
 import { NovelCardSkeleton } from "./novel-card-skeleton";
+import { NewNovelButton } from "./new-novel-button";
 
 export function NovelListSkeleton() {
   return (
@@ -15,13 +16,16 @@ export function NovelListSkeleton() {
 }
 
 export function NovelList() {
-  const { data: novels } = useSuspenseQuery(getNovelsQueryOptions());
+  const { data: novels } = useSuspenseQuery(getRecentNovelsQueryOptions());
 
   if (novels.length === 0) {
     return (
-      <Text c="dimmed" size="sm">
-        No novels yet. Create your first novel to get started.
-      </Text>
+      <Stack className="items-center gap-4">
+        <Text c="dimmed" className="text-sm">
+          No novels yet. Create your first novel to get started.
+        </Text>
+        <NewNovelButton />
+      </Stack>
     );
   }
 

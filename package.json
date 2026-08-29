@@ -20,10 +20,10 @@
     "deploy": "pnpm cf:typegen && pnpm build && pnpm wrangler deploy",
     "db:typegen": "node scripts/generate-db-types.ts",
     "db:generate": "node scripts/generate-migrations.ts",
-    "db:migrate:local": "pnpm db:generate && wrangler d1 migrations apply translator-prod-db --local && pnpm db:typegen",
-    "db:migrate:remote": "pnpm db:generate && wrangler d1 migrations apply translator-prod-db --remote && pnpm db:typegen",
     "db:seed:local": "node scripts/seed-greetings.ts --local",
-    "db:seed:remote": "node scripts/seed-greetings.ts --remote"
+    "db:seed:remote": "node scripts/seed-greetings.ts --remote",
+    "db:migrate:local": "pnpm db:generate && wrangler d1 migrations apply translator-prod-db --local && pnpm db:typegen",
+    "db:migrate:remote": "pnpm db:generate && wrangler d1 migrations apply translator-prod-db --remote && pnpm db:typegen"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
@@ -37,6 +37,7 @@
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.4.0",
     "jsonwebtoken": "^9.0.3",
     "kysely": "^0.29.5",
     "kysely-d1": "^0.4.0",

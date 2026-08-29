@@ -6,12 +6,17 @@ import { translatorService } from "../translator/translator.server";
 import { CreateNovelSchema, type Novel } from "./novels-core";
 
 export const novelsQueryKey = ["novels"] as const;
+export const recentNovelsQueryKey = ["novels", "recent"] as const;
 export const novelDetailQueryKey = (slug: string) => ["novels", slug] as const;
 
 const SlugSchema = z.object({ slug: z.string().min(1) });
 
 const listNovels = createServerFn().handler(async (): Promise<Novel[]> => {
   return translatorService.listNovels();
+});
+
+const listRecentNovels = createServerFn().handler(async (): Promise<Novel[]> => {
+  return translatorService.listRecentNovels();
 });
 
 export const createNovel = createServerFn({ method: "POST" })
@@ -40,6 +45,10 @@ export const startParsing = createServerFn({ method: "POST" })
 
 export function getNovelsQueryOptions() {
   return { queryFn: () => listNovels(), queryKey: novelsQueryKey };
+}
+
+export function getRecentNovelsQueryOptions() {
+  return { queryFn: () => listRecentNovels(), queryKey: recentNovelsQueryKey };
 }
 
 export function getNovelDetailQueryOptions(slug: string) {

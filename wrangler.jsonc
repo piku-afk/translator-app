@@ -28,12 +28,12 @@
     "producers": [
       {
         "binding": "PARSE_QUEUE",
-        "queue": "translator-parse-queue",
+        "queue": "translator-prod-parse-queue",
       },
     ],
     "consumers": [
       {
-        "queue": "translator-parse-queue",
+        "queue": "translator-prod-parse-queue",
         // Must match PARSE_MAX_RETRIES in src/lib/translator/service.ts: the
         // consumer treats a message on that attempt as exhausted and moves the
         // novel to `failed` instead of retrying again.

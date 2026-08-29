@@ -36,6 +36,7 @@ export interface NovelDetail {
  */
 export interface TranslatorService {
   listNovels(): Promise<Novel[]>;
+  listRecentNovels(): Promise<Novel[]>;
   findNovelBySlug(slug: string): Promise<Novel | undefined>;
   getNovelDetail(slug: string): Promise<NovelDetail | undefined>;
   createNovel(input: CreateNovelInput): Promise<Novel>;
@@ -55,6 +56,10 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       .orderBy("created_at", "desc")
       .orderBy("id", "desc")
       .execute();
+  }
+
+  async function listRecentNovels(): Promise<Novel[]> {
+    return db.selectFrom("novels").selectAll().orderBy("updated_at", "desc").limit(3).execute();
   }
 
   async function findNovelBySlug(slug: string): Promise<Novel | undefined> {
@@ -234,7 +239,15 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     return { novel, chapter_count: Number(row?.chapter_count ?? 0) };
   }
 
-  return { listNovels, findNovelBySlug, getNovelDetail, createNovel, startParsing, runParseJob };
+  return {
+    listNovels,
+    createNovel,
+    runParseJob,
+    startParsing,
+    getNovelDetail,
+    findNovelBySlug,
+    listRecentNovels,
+  };
 }
 
 /** SQLite reports unique violations as "UNIQUE constraint failed: <table>.<col>". */

@@ -1,16 +1,16 @@
-import { Box, Button, Group, Stack, Title } from "@mantine/core";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { Box, Group, Stack, Title } from "@mantine/core";
+import { createFileRoute } from "@tanstack/react-router";
 import { Greeting, GreetingSkeleton } from "#/components/greeting";
 import { NovelList, NovelListSkeleton } from "#/components/novel-list";
 import { getGreetingDataQueryOptions } from "#/lib/greetings/greetings";
-import { getNovelsQueryOptions } from "#/lib/novels/novels";
-import { Plus } from "lucide-react";
+import { getRecentNovelsQueryOptions } from "#/lib/novels/novels";
 import { Suspense } from "react";
+import { NewNovelButton } from "#/components/new-novel-button";
 
 export const Route = createFileRoute("/_app/")({
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(getGreetingDataQueryOptions());
-    context.queryClient.prefetchQuery(getNovelsQueryOptions());
+    context.queryClient.prefetchQuery(getRecentNovelsQueryOptions());
   },
   component: function HomePage() {
     return (
@@ -23,17 +23,9 @@ export const Route = createFileRoute("/_app/")({
         <Box component="section" className="space-y-6">
           <Group className="justify-between">
             <Title order={2} className="text-xl font-medium text-foreground" aria-level={2}>
-              Your Novels
+              Recent Novels
             </Title>
-            <Button
-              variant="outline"
-              size="compact-md"
-              classNames={{ root: "h-7 hover:text-black", label: "gap-1 text-sm font-medium" }}
-              renderRoot={(props) => <Link to="/novels/new" {...props} />}
-            >
-              <Plus className="size-4" />
-              New Novel
-            </Button>
+            <NewNovelButton />
           </Group>
 
           <Suspense fallback={<NovelListSkeleton />}>

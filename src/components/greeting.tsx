@@ -17,7 +17,7 @@ export function Greeting() {
   } = useSuspenseQuery(getGreetingDataQueryOptions());
 
   return (
-    <Stack className="items-center text-center gap-2">
+    <Stack className="items-center gap-2">
       <Title className="text-3xl font-semibold">{greeting}</Title>
 
       <Text c="dimmed" className="text-sm">
