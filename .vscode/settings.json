@@ -2,5 +2,16 @@
   "oxc.enable": true,
   "editor.defaultFormatter": "oxc.oxc-vscode",
   "editor.formatOnSave": true,
-  "editor.formatOnSaveMode": "file"
+  "editor.formatOnSaveMode": "file",
+  "[typescript]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "sqltools.connections": [
+    {
+      "previewLimit": 50,
+      "driver": "SQLite",
+      "database": "${workspaceFolder:translator-app}/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/e236f2922c0104f6f2797210742b3c38f358626608603a5055fb8d2981864d2e.sqlite",
+      "name": "local-db"
+    }
+  ]
 }
