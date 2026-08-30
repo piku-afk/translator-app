@@ -8,7 +8,24 @@ import {
   type NovelStatus,
   type SourceLanguage,
 } from "../novels/novels-core";
-import type { ParseJobMessage, TranslatorPorts } from "./ports";
+import type {
+  ExtractionJobMessage,
+  ModelNotesDiff,
+  ModelNotesEntry,
+  ParseJobMessage,
+  TranslatorPorts,
+} from "./ports";
+import {
+  applyGlossaryDiff,
+  filterNamesBySourceText,
+  filterNotesBySourceText,
+  joinVariations,
+  splitVariations,
+  type Glossary,
+  type GlossaryCategory,
+  type GlossaryDiff,
+  type GlossaryEntry,
+} from "./glossary";
 import { extractChapters } from "./extractors";
 import { getErrorMessage } from "../utils";
 
@@ -18,10 +35,18 @@ import { getErrorMessage } from "../utils";
  * drop silently, which would strand the novel in `parsing`. */
 export const PARSE_MAX_RETRIES = 3;
 
+/** Retries the extraction queue allows per message; must match the wrangler
+ * consumer's `max_retries` (wrangler.jsonc), added in the production-wiring
+ * ticket. On exhaustion the novel moves to `extraction failed`. */
+export const EXTRACTION_MAX_RETRIES = 3;
+
 export const NOVEL_NOT_FOUND_ERROR = "Novel not found";
 
 /** How the queue consumer should settle a message after runParseJob. */
 export type ParseSettlement = { outcome: "ack" } | { outcome: "retry" };
+
+/** How the queue consumer should settle a message after runExtractionJob. */
+export type ExtractionSettlement = { outcome: "ack" } | { outcome: "retry" };
 
 /** A novel plus the parse state the details page needs. */
 export interface NovelDetail {
@@ -47,6 +72,10 @@ export interface TranslatorService {
   startParsing(slug: string): Promise<Novel>;
   /** One parse-queue consumer invocation for a single message. */
   runParseJob(job: ParseJobMessage, attempt: number): Promise<ParseSettlement>;
+  /** Explicit, operator-only extraction start (never automatic). */
+  startExtraction(slug: string): Promise<Novel>;
+  /** One extraction-queue consumer invocation for a single message. */
+  runExtractionJob(job: ExtractionJobMessage, attempt: number): Promise<ExtractionSettlement>;
 }
 
 export function createTranslatorService(ports: TranslatorPorts): TranslatorService {
@@ -239,6 +268,193 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     }
   }
 
+  async function startExtraction(slug: string): Promise<Novel> {
+    const novel = await findNovelBySlug(slug);
+
+    if (!novel) {
+      throw new Error(NOVEL_NOT_FOUND_ERROR);
+    }
+
+    if (
+      novel.status !== "ready" &&
+      novel.status !== "names extracted" &&
+      novel.status !== "extraction failed"
+    ) {
+      throw new Error(
+        `Only ready, names extracted, or extraction failed novels can start extraction (currently "${novel.status}")`,
+      );
+    }
+
+    await setNovelStatus(novel.id, "extracting");
+
+    try {
+      await ports.extractionQueue.enqueue({ novelId: novel.id });
+    } catch (error) {
+      // The job never made it onto the queue, so the operator was not told the
+      // truth if we stayed in `extracting`: revert to the status the novel had
+      // before this call so Start extraction can be pressed again.
+      await setNovelStatus(novel.id, novel.status);
+      throw error;
+    }
+
+    return (await findNovelById(novel.id))!;
+  }
+
+  /** Load the novel's current glossary from D1, split into variation arrays. */
+  async function loadGlossary(novelId: number): Promise<Glossary> {
+    const rows = await db
+      .selectFrom("glossary_entries")
+      .selectAll()
+      .where("novel_id", "=", novelId)
+      .orderBy("id")
+      .execute();
+    return rows.map((row) => ({
+      id: row.id,
+      category: row.category as GlossaryCategory,
+      sourceNames: splitVariations(row.source_names),
+      englishNames: splitVariations(row.english_names),
+      description: row.description,
+    }));
+  }
+
+  /** Sync D1 to a glossary produced by applying a model diff to `before`. */
+  async function persistGlossary(
+    novelId: number,
+    before: Glossary,
+    after: Glossary,
+  ): Promise<void> {
+    const beforeById = new Map(before.map((entry) => [entry.id, entry]));
+    const afterById = new Map(after.map((entry) => [entry.id, entry]));
+    const timestamp = new Date().toISOString();
+
+    // Deletes: rows in `before` but no longer in `after` (addressable by id).
+    const deletedIds = before.filter((entry) => !afterById.has(entry.id)).map((entry) => entry.id);
+    if (deletedIds.length > 0) {
+      await db
+        .deleteFrom("glossary_entries")
+        .where("novel_id", "=", novelId)
+        .where("id", "in", deletedIds)
+        .execute();
+    }
+
+    // Inserts: entries in `after` whose id is not in `before`. The merge core
+    // assigns new entries ids strictly above the original max id, so a
+    // genuinely new entry is never mistaken for an update.
+    const inserts = after.filter((entry) => !beforeById.has(entry.id));
+    if (inserts.length > 0) {
+      await db
+        .insertInto("glossary_entries")
+        .values(
+          inserts.map((entry) => ({
+            novel_id: novelId,
+            category: entry.category,
+            source_names: joinVariations(entry.sourceNames),
+            english_names: joinVariations(entry.englishNames),
+            description: entry.description,
+            created_at: timestamp,
+            updated_at: timestamp,
+          })),
+        )
+        .execute();
+    }
+
+    // Updates: entries present in both, rewriting the row when it changed.
+    for (const entry of after) {
+      const beforeEntry = beforeById.get(entry.id);
+      if (!beforeEntry || sameEntry(beforeEntry, entry)) continue;
+      await db
+        .updateTable("glossary_entries")
+        .set({
+          category: entry.category,
+          source_names: joinVariations(entry.sourceNames),
+          english_names: joinVariations(entry.englishNames),
+          description: entry.description,
+          updated_at: timestamp,
+        })
+        .where("id", "=", entry.id)
+        .execute();
+    }
+  }
+
+  async function runExtractionJob(
+    job: ExtractionJobMessage,
+    attempt: number,
+  ): Promise<ExtractionSettlement> {
+    const novel = await findNovelById(job.novelId);
+
+    if (!novel) {
+      return { outcome: "ack" }; // novel gone: nothing left to finalize
+    }
+
+    if (novel.status !== "extracting") {
+      return { outcome: "ack" }; // stale/duplicate message: the novel moved on
+    }
+
+    try {
+      // Walk chapters 1..N sequentially (the accepted ADR-0001 bottleneck).
+      const chapters = await db
+        .selectFrom("chapters")
+        .selectAll()
+        .where("novel_id", "=", novel.id)
+        .orderBy("number")
+        .execute();
+
+      for (const chapter of chapters) {
+        // Resume-on-retry: a chapter already at `names extracted` is skipped,
+        // so a retried or re-triggered pass picks up where it broke instead of
+        // replaying model calls.
+        if (chapter.status === "names extracted") continue;
+
+        const sourceText = await ports.storage.get(chapterFileKey(novel.slug, chapter.number));
+        if (sourceText === null) {
+          throw new Error(
+            `Chapter file missing on storage for novel "${novel.slug}" chapter ${chapter.number}`,
+          );
+        }
+
+        // Consult the cumulative glossary, filtered to this chapter's text so
+        // model calls stay cheap.
+        const glossary = await loadGlossary(novel.id);
+        const filteredNames = filterNamesBySourceText(sourceText, glossary);
+        const filteredNotes = toModelNotes(filterNotesBySourceText(sourceText, glossary));
+
+        // The two-call model protocol, per chapter.
+        const { newNames } = await ports.model.getNewNames({ sourceText, filteredNames });
+        const { notesChanges } = await ports.model.getNotesDiff({
+          sourceText,
+          filteredNotes,
+          newNames,
+        });
+
+        // Commit this chapter's diff to the cumulative glossary, then mark the
+        // chapter `names extracted` before moving on.
+        const updated = applyGlossaryDiff(glossary, fromModelNotesDiff(notesChanges));
+        await persistGlossary(novel.id, glossary, updated);
+
+        await db
+          .updateTable("chapters")
+          .set({ status: "names extracted", updated_at: new Date().toISOString() })
+          .where("id", "=", chapter.id)
+          .execute();
+      }
+
+      // The walk completed: the glossary is complete.
+      await setNovelStatus(novel.id, "names extracted", null);
+      return { outcome: "ack" };
+    } catch (error) {
+      if (attempt >= EXTRACTION_MAX_RETRIES) {
+        try {
+          await setNovelStatus(novel.id, "extraction failed", getErrorMessage(error));
+          return { outcome: "ack" };
+        } catch {
+          // Even recording the failure failed; let the queue retry the message.
+          return { outcome: "retry" };
+        }
+      }
+      return { outcome: "retry" };
+    }
+  }
+
   async function getNovelDetail(slug: string): Promise<NovelDetail | undefined> {
     const novel = await findNovelBySlug(slug);
     if (!novel) {
@@ -257,10 +473,56 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     createNovel,
     runParseJob,
     startParsing,
+    runExtractionJob,
+    startExtraction,
     getNovelDetail,
     findNovelBySlug,
     listRecentNovels,
   };
+}
+
+/** Convert glossary entries to the model-facing notes shape (`;`-joined). */
+function toModelNotes(entries: GlossaryEntry[]): ModelNotesEntry[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    category: entry.category,
+    sourceName: joinVariations(entry.sourceNames),
+    englishName: joinVariations(entry.englishNames),
+    description: entry.description,
+  }));
+}
+
+/** Convert the model's notes diff to the glossary core's diff (arrays). */
+function fromModelNotesDiff(diff: ModelNotesDiff): GlossaryDiff {
+  return {
+    additions: diff.additions.map((addition) => ({
+      category: addition.category,
+      sourceNames: splitVariations(addition.sourceName),
+      englishNames: splitVariations(addition.englishName),
+      description: addition.description,
+    })),
+    updates: diff.updates.map((update) => ({
+      id: update.id,
+      category: update.category,
+      sourceNames: splitVariations(update.sourceName),
+      englishNames: splitVariations(update.englishName),
+      description: update.description,
+    })),
+    deletions: diff.deletions.map((deletion) => ({
+      id: deletion.id,
+      category: deletion.category,
+    })),
+  };
+}
+
+/** True when two glossary entries carry identical content. */
+function sameEntry(a: GlossaryEntry, b: GlossaryEntry): boolean {
+  return (
+    a.category === b.category &&
+    a.description === b.description &&
+    joinVariations(a.sourceNames) === joinVariations(b.sourceNames) &&
+    joinVariations(a.englishNames) === joinVariations(b.englishNames)
+  );
 }
 
 /** SQLite reports unique violations as "UNIQUE constraint failed: <table>.<col>". */

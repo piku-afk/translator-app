@@ -360,7 +360,7 @@ describe("applyGlossaryDiff", () => {
 
     const result = applyGlossaryDiff(glossary, diff);
 
-    expect(result.map((entry) => entry.id)).toEqual([1, 2]);
+    expect(result.map((entry) => entry.id)).toEqual([1, 3]);
     expect(result[0].sourceNames).toEqual(["강민수", "민수 형사"]);
     expect(result[1].category).toBe("places");
   });

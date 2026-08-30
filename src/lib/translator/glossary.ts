@@ -143,6 +143,10 @@ function maxId(entries: Glossary): number {
  * - An addition whose alias set collides with an existing entry (same category,
  *   shared source alias) is merged into it rather than inserted; otherwise it
  *   is inserted with the next free id.
+ *
+ * New entries are assigned ids strictly above the original glossary's max id
+ * (computed before deletions), so a caller can distinguish a genuinely new
+ * entry from an updated one by id alone.
  */
 export function applyGlossaryDiff(glossary: Glossary, diff: GlossaryDiff): Glossary {
   let entries = glossary.map((entry) => ({
@@ -166,7 +170,7 @@ export function applyGlossaryDiff(glossary: Glossary, diff: GlossaryDiff): Gloss
     };
   }
 
-  let nextId = maxId(entries) + 1;
+  let nextId = maxId(glossary) + 1;
   for (const addition of diff.additions) {
     const collision = entries.find(
       (entry) =>

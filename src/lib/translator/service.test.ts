@@ -12,8 +12,19 @@ import {
   type CreateNovelInput,
   type Novel,
 } from "../novels/novels-core";
-import { NOVEL_NOT_FOUND_ERROR, PARSE_MAX_RETRIES, createTranslatorService } from "./service";
-import type { ObjectStorePort, ParseJobMessage, ParseQueuePort } from "./ports";
+import {
+  EXTRACTION_MAX_RETRIES,
+  NOVEL_NOT_FOUND_ERROR,
+  PARSE_MAX_RETRIES,
+  createTranslatorService,
+} from "./service";
+import type {
+  ModelNotesDiff,
+  ModelPort,
+  ObjectStorePort,
+  ParseJobMessage,
+  ParseQueuePort,
+} from "./ports";
 
 // ---------------------------------------------------------------------------
 // Port doubles: in-memory storage/queue, real Kysely over in-memory SQLite.
@@ -73,12 +84,63 @@ function createMemoryQueue(): ParseQueuePort & {
   };
 }
 
+interface FakeModel extends ModelPort {
+  calls: Array<{ chapterNumber: number; fn: "getNewNames" | "getNotesDiff"; sourceText: string }>;
+  setFailing(failing: boolean): void;
+}
+
+/**
+ * A deterministic model double: filters are captured per chapter, and each
+ * chapter yields a single new-names entry plus a matching notes addition. Set
+ * failing to simulate a transient (or exhausting) model/gateway failure.
+ */
+function createFakeModel(): FakeModel {
+  const calls: FakeModel["calls"] = [];
+  let failing = false;
+  return {
+    calls,
+    setFailing(next) {
+      failing = next;
+    },
+    async getNewNames({ sourceText }) {
+      calls.push({ chapterNumber: 0, fn: "getNewNames", sourceText });
+      if (failing) throw new Error("model unavailable");
+      return {
+        newNames: [{ sourceName: `신규${sourceText.slice(0, 1)}`, englishName: `New${sourceText.slice(0, 1)}` }],
+      };
+    },
+    async getNotesDiff({ sourceText, newNames }) {
+      calls.push({ chapterNumber: 0, fn: "getNotesDiff", sourceText });
+      if (failing) throw new Error("model unavailable");
+      const notes: ModelNotesDiff = {
+        additions: newNames.map((name) => ({
+          category: "characters",
+          sourceName: name.sourceName,
+          englishName: name.englishName,
+          description: "New character from this chapter",
+        })),
+        updates: [],
+        deletions: [],
+      };
+      return { notesChanges: notes };
+    },
+  };
+}
+
 async function makeService() {
   const db = await createTestDb();
   const storage = createMemoryStorage();
   const parseQueue = createMemoryQueue();
-  const service = createTranslatorService({ db, storage, parseQueue });
-  return { db, storage, parseQueue, service };
+  const extractionQueue = createMemoryQueue();
+  const model = createFakeModel();
+  const service = createTranslatorService({
+    db,
+    storage,
+    parseQueue,
+    extractionQueue,
+    model,
+  });
+  return { db, storage, parseQueue, extractionQueue, model, service };
 }
 
 const validInput: CreateNovelInput = {
@@ -390,6 +452,183 @@ describe("runParseJob", () => {
     const { service } = await makeService();
 
     expect(await service.runParseJob({ novelId: 4242 }, 1)).toEqual({ outcome: "ack" });
+  });
+});
+
+describe("startExtraction", () => {
+  it("moves a ready novel to extracting and enqueues an extraction job", async () => {
+    const { db, extractionQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "ready" });
+
+    const updated = await service.startExtraction(novel.slug);
+
+    expect(updated.status).toBe("extracting");
+    expect(extractionQueue.jobs).toEqual([{ novelId: novel.id }]);
+  });
+
+  it("allows re-running extraction from names extracted", async () => {
+    const { db, extractionQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "names extracted" });
+
+    const updated = await service.startExtraction(novel.slug);
+
+    expect(updated.status).toBe("extracting");
+    expect(extractionQueue.jobs).toEqual([{ novelId: novel.id }]);
+  });
+
+  it("allows re-running extraction from extraction failed", async () => {
+    const { db, extractionQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "extraction failed", last_error: "boom" });
+
+    const updated = await service.startExtraction(novel.slug);
+
+    expect(updated.status).toBe("extracting");
+    expect(extractionQueue.jobs).toEqual([{ novelId: novel.id }]);
+  });
+
+  it("rejects a novel that is not ready, names extracted, or extraction failed", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "draft" });
+
+    await expect(service.startExtraction(novel.slug)).rejects.toThrow(
+      'Only ready, names extracted, or extraction failed novels can start extraction (currently "draft")',
+    );
+  });
+
+  it("rejects an unknown novel", async () => {
+    const { service } = await makeService();
+
+    await expect(service.startExtraction("missing")).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
+  });
+
+  it("reverts to the original status when the enqueue fails", async () => {
+    const { db, extractionQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "extraction failed", last_error: "boom" });
+    extractionQueue.setFailing(true);
+
+    await expect(service.startExtraction(novel.slug)).rejects.toThrow("queue unavailable");
+
+    const reverted = await refetchNovel(db, novel.id);
+    expect(reverted.status).toBe("extraction failed");
+    expect(extractionQueue.jobs).toEqual([]);
+  });
+});
+
+describe("runExtractionJob", () => {
+  /** Seed a ready novel with `numbers` chapter rows and matching chapter files. */
+  async function seedExtractionNovel(
+    db: Kysely<Database>,
+    storage: ReturnType<typeof createMemoryStorage>,
+    numbers: number[],
+  ): Promise<Novel> {
+    const novel = await seedNovel(db, { status: "extracting", total_chapters: numbers.length });
+    for (const number of numbers) {
+      await seedChapter(db, novel.id, number);
+      await storage.put(chapterFileKey(novel.slug, number), `${number}화.\n${number}번째 본문입니다.`);
+    }
+    return novel;
+  }
+
+  it("walks chapters sequentially, commits each diff, and reaches names extracted", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedExtractionNovel(db, storage, [1, 2]);
+
+    const settlement = await service.runExtractionJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const chapters = await db.selectFrom("chapters").selectAll().orderBy("number").execute();
+    expect(chapters.map((c) => c.status)).toEqual(["names extracted", "names extracted"]);
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("names extracted");
+    expect(updated.last_error).toBeNull();
+
+    const entries = await db.selectFrom("glossary_entries").selectAll().orderBy("id").execute();
+    expect(entries.map((e) => e.category)).toEqual(["characters", "characters"]);
+    expect(entries[0].source_names).toContain("신규1");
+    expect(entries[1].source_names).toContain("신규2");
+  });
+
+  it("feeds the model Fuse-filtered inputs per chapter", async () => {
+    const { db, model, storage, service } = await makeService();
+    const novel = await seedExtractionNovel(db, storage, [1]);
+
+    await service.runExtractionJob({ novelId: novel.id }, 1);
+
+    expect(model.calls.map((c) => c.fn)).toEqual(["getNewNames", "getNotesDiff"]);
+    expect(model.calls[0].sourceText).toContain("1화");
+  });
+
+  it("resumes from the last completed chapter, skipping names-extracted chapters", async () => {
+    const { db, model, storage, service } = await makeService();
+    const novel = await seedExtractionNovel(db, storage, [1, 2]);
+    await db
+      .updateTable("chapters")
+      .set({ status: "names extracted" })
+      .where("novel_id", "=", novel.id)
+      .where("number", "=", 1)
+      .execute();
+
+    const settlement = await service.runExtractionJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    // Only chapter 2 was fed to the model.
+    expect(model.calls.filter((c) => c.fn === "getNewNames")).toHaveLength(1);
+    expect(model.calls[0].sourceText).toContain("2화");
+    const chapters = await db.selectFrom("chapters").selectAll().orderBy("number").execute();
+    expect(chapters.map((c) => c.status)).toEqual(["names extracted", "names extracted"]);
+  });
+
+  it("never duplicates entities when re-running the same diff", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedExtractionNovel(db, storage, [1]);
+
+    await service.runExtractionJob({ novelId: novel.id }, 1);
+    await service.startExtraction(novel.slug); // re-trigger
+    await service.runExtractionJob({ novelId: novel.id }, 1);
+
+    const entries = await db.selectFrom("glossary_entries").selectAll().execute();
+    expect(entries).toHaveLength(1);
+  });
+
+  it("requests a retry on a transient model error, leaving the novel extracting", async () => {
+    const { db, model, storage, service } = await makeService();
+    const novel = await seedExtractionNovel(db, storage, [1]);
+    model.setFailing(true);
+
+    const settlement = await service.runExtractionJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "retry" });
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("extracting");
+  });
+
+  it("moves the novel to extraction failed with last_error once retries are exhausted", async () => {
+    const { db, model, storage, service } = await makeService();
+    const novel = await seedExtractionNovel(db, storage, [1]);
+    model.setFailing(true);
+
+    const settlement = await service.runExtractionJob({ novelId: novel.id }, EXTRACTION_MAX_RETRIES);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("extraction failed");
+    expect(updated.last_error).toContain("model unavailable");
+  });
+
+  it("acks stale messages for novels no longer extracting", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "ready" });
+
+    const settlement = await service.runExtractionJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    expect(await db.selectFrom("chapters").selectAll().execute()).toHaveLength(0);
+  });
+
+  it("acks messages for unknown novels", async () => {
+    const { service } = await makeService();
+
+    expect(await service.runExtractionJob({ novelId: 4242 }, 1)).toEqual({ outcome: "ack" });
   });
 });
 
