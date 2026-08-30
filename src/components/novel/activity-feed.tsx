@@ -1,5 +1,6 @@
-import { Skeleton, Stack, Text } from "@mantine/core";
+import { EmptyState, Skeleton, Stack } from "@mantine/core";
 import { useSuspenseQuery } from "@tanstack/react-query";
+import { History } from "lucide-react";
 import { getRecentActivitiesQueryOptions } from "#/lib/novels/novels";
 import { ActivityItem } from "./activity-item";
 
@@ -20,9 +21,12 @@ export function ActivityFeed() {
 
   if (activities.length === 0) {
     return (
-      <Text c="dimmed" className="text-sm">
-        No activity yet. Create a novel to get started.
-      </Text>
+      <EmptyState
+        classNames={{ title: "text-base font-medium" }}
+        icon={<History className="size-8" aria-hidden />}
+        title="No activity yet"
+        description="Create a novel to see its lifecycle events here."
+      />
     );
   }
 

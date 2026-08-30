@@ -1,5 +1,6 @@
-import { Stack, Text } from "@mantine/core";
+import { EmptyState, Stack } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
+import { History } from "lucide-react";
 import { getNovelActivityQueryOptions } from "#/lib/novels/novels";
 import { ActivityItem } from "./activity-item";
 
@@ -21,9 +22,12 @@ export function NovelHistory({ slug, isActive }: NovelHistoryProps) {
 
   if (activities.length === 0) {
     return (
-      <Text c="dimmed" className="text-sm">
-        No history yet. Lifecycle events for this novel will appear here.
-      </Text>
+      <EmptyState
+        classNames={{ title: "text-base font-medium" }}
+        icon={<History className="size-8" aria-hidden />}
+        title="No history yet"
+        description="Lifecycle events for this novel will appear here."
+      />
     );
   }
 
