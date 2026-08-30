@@ -13,7 +13,6 @@ import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppNovelsSlugRouteImport } from './routes/_app/novels/$slug'
-import { Route as AppNovelsNewRouteImport } from './routes/_app/novels/new'
 
 const AppRouteRoute = AppRouteRouteImport.update({
   id: '/_app',
@@ -34,23 +33,16 @@ const AppNovelsSlugRoute = AppNovelsSlugRouteImport.update({
   path: '/novels/$slug',
   getParentRoute: () => AppRouteRoute,
 } as any)
-const AppNovelsNewRoute = AppNovelsNewRouteImport.update({
-  id: '/novels/new',
-  path: '/novels/new',
-  getParentRoute: () => AppRouteRoute,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/login': typeof LoginRoute
   '/novels/$slug': typeof AppNovelsSlugRoute
-  '/novels/new': typeof AppNovelsNewRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/': typeof AppIndexRoute
   '/novels/$slug': typeof AppNovelsSlugRoute
-  '/novels/new': typeof AppNovelsNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -58,20 +50,13 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_app/': typeof AppIndexRoute
   '/_app/novels/$slug': typeof AppNovelsSlugRoute
-  '/_app/novels/new': typeof AppNovelsNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/novels/$slug' | '/novels/new'
+  fullPaths: '/' | '/login' | '/novels/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/' | '/novels/$slug' | '/novels/new'
-  id:
-    | '__root__'
-    | '/_app'
-    | '/login'
-    | '/_app/'
-    | '/_app/novels/$slug'
-    | '/_app/novels/new'
+  to: '/login' | '/' | '/novels/$slug'
+  id: '__root__' | '/_app' | '/login' | '/_app/' | '/_app/novels/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -109,26 +94,17 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppNovelsSlugRouteImport
       parentRoute: typeof AppRouteRoute
     }
-    '/_app/novels/new': {
-      id: '/_app/novels/new'
-      path: '/novels/new'
-      fullPath: '/novels/new'
-      preLoaderRoute: typeof AppNovelsNewRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
   }
 }
 
 interface AppRouteRouteChildren {
   AppIndexRoute: typeof AppIndexRoute
   AppNovelsSlugRoute: typeof AppNovelsSlugRoute
-  AppNovelsNewRoute: typeof AppNovelsNewRoute
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppIndexRoute: AppIndexRoute,
   AppNovelsSlugRoute: AppNovelsSlugRoute,
-  AppNovelsNewRoute: AppNovelsNewRoute,
 }
 
 const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(

@@ -29,13 +29,17 @@ export interface NovelDetail {
   chapter_count: number;
 }
 
+/** A novel plus the number of parsed chapter rows, for list views. */
+export type NovelSummary = Novel & { parsed_chapters: number };
+
 /**
  * The translator service seam: every Novel/Chapter domain operation, written
  * against injected ports so it runs unchanged on Cloudflare bindings or on
  * in-memory test doubles. Framework- and Cloudflare-agnostic by construction.
  */
 export interface TranslatorService {
-  listNovels(): Promise<Novel[]>;
+  listNovels(): Promise<NovelSummary[]>;
+  listRecentNovels(): Promise<NovelSummary[]>;
   findNovelBySlug(slug: string): Promise<Novel | undefined>;
   getNovelDetail(slug: string): Promise<NovelDetail | undefined>;
   createNovel(input: CreateNovelInput): Promise<Novel>;
@@ -48,13 +52,27 @@ export interface TranslatorService {
 export function createTranslatorService(ports: TranslatorPorts): TranslatorService {
   const { db } = ports;
 
-  async function listNovels(): Promise<Novel[]> {
+  // parsed_chapters is derived, never stored: COUNT over the per-chapter rows
+  // joined to each novel. count (not countAll) so the LEFT JOIN's null-extended
+  // row for an unparsed novel tallies 0, not 1.
+  function withParsedChapters() {
     return db
       .selectFrom("novels")
-      .selectAll()
-      .orderBy("created_at", "desc")
-      .orderBy("id", "desc")
+      .selectAll("novels")
+      .leftJoin("chapters", "chapters.novel_id", "novels.id")
+      .select((eb) => eb.fn.count<number>("chapters.id").as("parsed_chapters"))
+      .groupBy("novels.id");
+  }
+
+  async function listNovels(): Promise<NovelSummary[]> {
+    return withParsedChapters()
+      .orderBy("novels.created_at", "desc")
+      .orderBy("novels.id", "desc")
       .execute();
+  }
+
+  async function listRecentNovels(): Promise<NovelSummary[]> {
+    return withParsedChapters().orderBy("novels.updated_at", "desc").limit(3).execute();
   }
 
   async function findNovelBySlug(slug: string): Promise<Novel | undefined> {
@@ -136,9 +154,9 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       throw new Error(NOVEL_NOT_FOUND_ERROR);
     }
 
-    if (novel.status !== "draft" && novel.status !== "failed") {
+    if (novel.status !== "draft" && novel.status !== "failed" && novel.status !== "needs review") {
       throw new Error(
-        `Only draft or failed novels can start parsing (currently "${novel.status}")`,
+        `Only draft, failed, or needs review novels can start parsing (currently "${novel.status}")`,
       );
     }
 
@@ -148,9 +166,9 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       await ports.parseQueue.enqueue({ novelId: novel.id });
     } catch (error) {
       // The job never made it onto the queue, so the operator was not told
-      // the truth if we stayed in `parsing`: revert (to draft, per spec, even
-      // from failed) so Start parsing can be pressed again.
-      await setNovelStatus(novel.id, "draft");
+      // the truth if we stayed in `parsing`: revert to the status the novel
+      // had before this call so Start parsing can be pressed again.
+      await setNovelStatus(novel.id, novel.status);
       throw error;
     }
 
@@ -234,7 +252,15 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     return { novel, chapter_count: Number(row?.chapter_count ?? 0) };
   }
 
-  return { listNovels, findNovelBySlug, getNovelDetail, createNovel, startParsing, runParseJob };
+  return {
+    listNovels,
+    createNovel,
+    runParseJob,
+    startParsing,
+    getNovelDetail,
+    findNovelBySlug,
+    listRecentNovels,
+  };
 }
 
 /** SQLite reports unique violations as "UNIQUE constraint failed: <table>.<col>". */

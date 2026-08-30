@@ -1,11 +1,10 @@
-import { Card, Group, Stack } from "@mantine/core";
-import { Skeleton } from "./ui/skeleton";
+import { Card, Group, Skeleton, Stack } from "@mantine/core";
 
 export function NovelCardSkeleton() {
   return (
     <Card withBorder className="bg-transparent p-4">
       <Stack className="gap-6">
-        <Stack className="gap-3">
+        <Stack className="gap-2">
           <Skeleton className="h-4 w-full" />
           <Skeleton className="h-3  w-2/3" />
         </Stack>
@@ -13,6 +12,7 @@ export function NovelCardSkeleton() {
           <Skeleton className="h-3 w-15" />
           <Skeleton className="h-3 w-25" />
         </Group>
+        <Skeleton className="h-3 w-50" />
       </Stack>
     </Card>
   );

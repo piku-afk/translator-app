@@ -1,15 +1,18 @@
 import "@fontsource-variable/geist/wght.css";
 import { ColorSchemeScript, MantineProvider, mantineHtmlProps } from "@mantine/core";
+import { Notifications } from "@mantine/notifications";
 import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { TanStackDevtools } from "@tanstack/react-devtools";
 import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+import { theme } from "#/lib/mantine-theme";
+import favicon from "#/assets/favicon.svg";
 
 import "@mantine/core/styles.layer.css";
+import "@mantine/dropzone/styles.layer.css";
+import "@mantine/notifications/styles.layer.css";
 import appCss from "../styles.css?url";
-import favicon from "../assets/favicon.svg";
-import { theme } from "#/lib/mantine-theme";
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -35,6 +38,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           <body>
             <MantineProvider theme={theme}>
               <Outlet />
+              <Notifications position="top-center" />
             </MantineProvider>
             <Scripts />
           </body>

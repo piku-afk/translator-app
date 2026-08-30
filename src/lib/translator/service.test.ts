@@ -165,6 +165,35 @@ describe("listNovels", () => {
 
     expect(novels.map((n) => n.slug)).toEqual(["newer", "older"]);
   });
+
+  it("includes each novel's parsed chapter count, zero when unparsed", async () => {
+    const { db, service } = await makeService();
+    const parsed = await seedNovel(db, { slug: "parsed" });
+    await seedChapter(db, parsed.id, 1);
+    await seedChapter(db, parsed.id, 2);
+    await seedNovel(db, { slug: "unparsed" });
+
+    const novels = await service.listNovels();
+
+    expect(novels.map((n) => [n.slug, n.parsed_chapters])).toEqual([
+      ["unparsed", 0],
+      ["parsed", 2],
+    ]);
+  });
+});
+
+describe("listRecentNovels", () => {
+  it("returns the three most recently updated novels with parsed counts", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { slug: "recent" });
+    await seedChapter(db, novel.id, 1);
+    await seedNovel(db, { slug: "older", updated_at: "2026-01-01T00:00:00.000Z" });
+
+    const novels = await service.listRecentNovels();
+
+    expect(novels.map((n) => n.slug)).toEqual(["recent", "older"]);
+    expect(novels.map((n) => n.parsed_chapters)).toEqual([1, 0]);
+  });
 });
 
 describe("findNovelBySlug", () => {
@@ -205,12 +234,22 @@ describe("startParsing", () => {
     expect(parseQueue.jobs).toEqual([{ novelId: novel.id }]);
   });
 
-  it("rejects a novel that is not draft or failed", async () => {
+  it("allows re-triggering parsing from needs review", async () => {
+    const { db, parseQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "needs review" });
+
+    const updated = await service.startParsing(novel.slug);
+
+    expect(updated.status).toBe("parsing");
+    expect(parseQueue.jobs).toEqual([{ novelId: novel.id }]);
+  });
+
+  it("rejects a novel that is not draft, failed, or needs review", async () => {
     const { db, service } = await makeService();
     const novel = await seedNovel(db, { status: "ready" });
 
     await expect(service.startParsing(novel.slug)).rejects.toThrow(
-      'Only draft or failed novels can start parsing (currently "ready")',
+      'Only draft, failed, or needs review novels can start parsing (currently "ready")',
     );
   });
 
@@ -220,7 +259,7 @@ describe("startParsing", () => {
     await expect(service.startParsing("missing")).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
   });
 
-  it("reverts to draft when the enqueue fails", async () => {
+  it("reverts to the original status when the enqueue fails", async () => {
     const { db, parseQueue, service } = await makeService();
     const novel = await seedNovel(db, { status: "failed", last_error: "boom" });
     parseQueue.setFailing(true);
@@ -228,7 +267,7 @@ describe("startParsing", () => {
     await expect(service.startParsing(novel.slug)).rejects.toThrow("queue unavailable");
 
     const reverted = await refetchNovel(db, novel.id);
-    expect(reverted.status).toBe("draft");
+    expect(reverted.status).toBe("failed");
     expect(parseQueue.jobs).toEqual([]);
   });
 });

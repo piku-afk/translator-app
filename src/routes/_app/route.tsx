@@ -1,6 +1,7 @@
 import { AppShell, Container } from "@mantine/core";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { Header } from "#/components/header";
+import { Header } from "#/components/layout/header";
+import { AppModals, ModalSearchSchema } from "#/components/modals";
 import { getCreditsQueryOptions } from "#/lib/credits";
 import { getAuthState } from "#/lib/auth/session";
 
@@ -12,6 +13,9 @@ import { getAuthState } from "#/lib/auth/session";
  * is rendered.
  */
 export const Route = createFileRoute("/_app")({
+  // Validated here so `?modal=create-novel` opens the modal over any page in
+  // the app shell, present or future.
+  validateSearch: ModalSearchSchema,
   loader: async ({ context }) => {
     // getAuthState clears any stale/invalid session cookie when unauth'd, so
     // the operator lands on a clean login page.
@@ -28,8 +32,9 @@ export const Route = createFileRoute("/_app")({
       <AppShell header={{ height: 60 }} padding="md">
         <Header />
         <AppShell.Main>
-          <Container strategy="grid" className="py-10">
+          <Container strategy="grid" className="py-4">
             <Outlet />
+            <AppModals />
           </Container>
         </AppShell.Main>
       </AppShell>
