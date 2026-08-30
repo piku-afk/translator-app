@@ -1,35 +1,13 @@
 import { Badge, Card, Group, Stack, Text, Title } from "@mantine/core";
 import { Link } from "@tanstack/react-router";
 import { formatDistanceToNow } from "date-fns";
+import { STATUS_ACTION_VERBS, STATUS_BADGE_COLORS } from "#/lib/novels/status-metadata";
 import type { NovelSummary } from "#/lib/translator/service";
 import {
   sourceLanguageLabel,
   type NovelStatus,
   type SourceLanguage,
 } from "#/lib/novels/novels-core";
-
-/** Past-tense verb describing the last action. */
-const STATUS_ACTION_VERBS: Record<NovelStatus, string> = {
-  draft: "Created",
-  parsing: "Started parsing",
-  "needs review": "Parsed",
-  ready: "Reviewed",
-  extracting: "Started extracting",
-  translating: "Started translating",
-  completed: "Completed",
-  failed: "Failed",
-};
-
-/** Mantine color for each status badge; absent = the default (draft) style. */
-const STATUS_BADGE_COLORS: Partial<Record<NovelStatus, string>> = {
-  parsing: "blue",
-  extracting: "blue",
-  translating: "blue",
-  "needs review": "yellow",
-  failed: "red",
-  ready: "green",
-  completed: "green",
-};
 
 export function NovelCard({ novel }: { novel: NovelSummary }) {
   const badgeColor = STATUS_BADGE_COLORS[novel.status as NovelStatus];
@@ -38,7 +16,7 @@ export function NovelCard({ novel }: { novel: NovelSummary }) {
   return (
     <Card
       withBorder
-      className="p-4 bg-transparent hover:bg-white hover:border-black transition-colors cursor-pointer focus:outline-ring focus-visible:outline-2 focus-visible:outline-ring"
+      className="p-4 hover:border-black cursor-pointer focus:outline-ring focus-visible:outline-2 focus-visible:outline-ring"
       renderRoot={(props) => <Link to="/novels/$slug" params={{ slug: novel.slug }} {...props} />}
     >
       <Stack className="gap-4">

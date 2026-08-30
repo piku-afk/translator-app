@@ -1,11 +1,11 @@
 import { Box, Group, Stack, Title } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { Greeting, GreetingSkeleton } from "#/components/greeting";
-import { NovelList, NovelListSkeleton } from "#/components/novel-list";
+import { NovelList, NovelListSkeleton } from "#/components/novel/novel-list";
 import { getGreetingDataQueryOptions } from "#/lib/greetings/greetings";
 import { getRecentNovelsQueryOptions } from "#/lib/novels/novels";
 import { Suspense } from "react";
-import { NewNovelButton } from "#/components/new-novel-button";
+import { NewNovelButton } from "#/components/novel/new-novel-button";
 
 export const Route = createFileRoute("/_app/")({
   loader: async ({ context }) => {
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_app/")({
   },
   component: function HomePage() {
     return (
-      <Stack className="gap-10">
+      <Stack className="gap-10 py-6">
         <Suspense fallback={<GreetingSkeleton />}>
           <Greeting />
         </Suspense>

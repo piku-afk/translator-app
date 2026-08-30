@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { useLocation, useNavigate, useSearch } from "@tanstack/react-router";
-import { CREATE_NOVEL_MODAL, NewNovelModal } from "./new-novel-modal";
+import { CREATE_NOVEL_MODAL, NewNovelModal } from "./novel/new-novel-modal";
 
 /**
  * Registry of modals the app shell can open via the `?modal=` search param.
  *
  * Owned here, not in any one modal's file: each modal contributes its content
- * (and its id constant), while this file owns the mechanism — the param schema,
+ * (and its id constant), while this file owns the mechanism - the param schema,
  * reading the param, rendering the open modal over the current page, and
  * closing it. Adding a modal means creating its component and widening the
  * enum + switch below.

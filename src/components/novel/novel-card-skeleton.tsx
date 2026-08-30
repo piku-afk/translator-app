@@ -1,5 +1,4 @@
-import { Card, Group, Stack } from "@mantine/core";
-import { Skeleton } from "./ui/skeleton";
+import { Card, Group, Skeleton, Stack } from "@mantine/core";
 
 export function NovelCardSkeleton() {
   return (

@@ -154,9 +154,9 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       throw new Error(NOVEL_NOT_FOUND_ERROR);
     }
 
-    if (novel.status !== "draft" && novel.status !== "failed") {
+    if (novel.status !== "draft" && novel.status !== "failed" && novel.status !== "needs review") {
       throw new Error(
-        `Only draft or failed novels can start parsing (currently "${novel.status}")`,
+        `Only draft, failed, or needs review novels can start parsing (currently "${novel.status}")`,
       );
     }
 
@@ -166,9 +166,9 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       await ports.parseQueue.enqueue({ novelId: novel.id });
     } catch (error) {
       // The job never made it onto the queue, so the operator was not told
-      // the truth if we stayed in `parsing`: revert (to draft, per spec, even
-      // from failed) so Start parsing can be pressed again.
-      await setNovelStatus(novel.id, "draft");
+      // the truth if we stayed in `parsing`: revert to the status the novel
+      // had before this call so Start parsing can be pressed again.
+      await setNovelStatus(novel.id, novel.status);
       throw error;
     }
 

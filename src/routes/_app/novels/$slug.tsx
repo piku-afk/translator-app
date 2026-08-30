@@ -1,9 +1,10 @@
-import { Alert, Badge, Group, Stack, Text, Title } from "@mantine/core";
+import { Alert, Badge, Button, Divider, Group, Stack, Text, Title, Tooltip } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
-import { Spinner } from "#/components/ui/spinner";
-import { Button } from "#/components/ui/button";
+import { format, formatDistanceToNow } from "date-fns";
+import { Dot, Download, ArrowLeft, ArrowRight } from "lucide-react";
+import { NovelStatusAlert } from "#/components/novel/novel-status-alert";
+import { SectionHeading } from "#/components/ui/section-heading";
 import { getErrorMessage } from "#/lib/utils";
 import {
   getNovelDetailQueryOptions,
@@ -11,8 +12,23 @@ import {
   novelsQueryKey,
   startParsing,
 } from "#/lib/novels/novels";
+import { STATUS_ACTION_VERBS, STATUS_BADGE_COLORS } from "#/lib/novels/status-metadata";
 import { NOVEL_NOT_FOUND_ERROR } from "#/lib/translator/service";
-import { sourceLanguageLabel, type SourceLanguage } from "#/lib/novels/novels-core";
+import {
+  rawFileKey,
+  sourceLanguageLabel,
+  type NovelStatus,
+  type SourceLanguage,
+} from "#/lib/novels/novels-core";
+
+function OverviewRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Group className="items-baseline gap-4" wrap="nowrap">
+      <Text className="w-28 shrink-0 text-sm text-muted-foreground">{label}</Text>
+      {children}
+    </Group>
+  );
+}
 
 export const Route = createFileRoute("/_app/novels/$slug")({
   loader: async ({ params, context }) => {
@@ -49,69 +65,120 @@ export const Route = createFileRoute("/_app/novels/$slug")({
     }
 
     const { novel, chapter_count } = detail;
-    const canStartParsing = novel.status === "draft" || novel.status === "failed";
+    const status = novel.status as NovelStatus;
+    const canStartParsing = status === "draft" || status === "failed" || status === "needs review";
+    const isParsing = status === "parsing" || startParsingMutation.isPending;
+
+    // novel-card's language for the last action, with the same updated_at proxy.
+    const lastAction =
+      status === "parsing"
+        ? `${STATUS_ACTION_VERBS[status]} ${formatDistanceToNow(novel.updated_at, { addSuffix: true })}`
+        : `${STATUS_ACTION_VERBS[status]} ${format(novel.updated_at, "do MMM yyyy 'at' HH:mm")}`;
 
     return (
-      <Stack className="mx-auto w-full max-w-sm gap-6">
+      <Stack className="gap-6">
         <Stack className="gap-1">
           <Link
             to="/"
             className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="size-4" />
-            All novels
+            Home
           </Link>
-          <Title order={2}>{novel.name}</Title>
-          <Text c="dimmed" className="text-sm">
-            {sourceLanguageLabel(novel.source_language as SourceLanguage)} -&gt; English
-          </Text>
+          <Title order={2} className="text-3xl font-semibold">
+            {novel.name}
+          </Title>
+          <Group component={Text} c="dimmed" className="text-sm gap-0">
+            <Group component="span" className="gap-2">
+              {sourceLanguageLabel(novel.source_language as SourceLanguage)}
+              <ArrowRight className="size-3.5" />
+              English
+            </Group>
+            <Dot />
+            {novel.total_chapters} declared chapters
+            <Dot />
+            Added {format(novel.created_at, "do MMM yyyy")}
+          </Group>
         </Stack>
 
-        <Group className="items-center justify-between">
-          <Badge variant="default" size="xs">
-            {novel.status}
-          </Badge>
-          <Text className="text-xs font-medium">
-            {chapter_count} / {novel.total_chapters} chapters parsed
-          </Text>
-        </Group>
+        <Divider />
 
-        {novel.status === "parsing" && (
-          <Group className="gap-2 text-sm text-muted-foreground">
-            <Spinner className="size-3" />
-            Parsing chapters&hellip;
+        <Stack className="gap-3">
+          <SectionHeading>Overview</SectionHeading>
+          <OverviewRow label="Status">
+            <Badge
+              variant={STATUS_BADGE_COLORS[status] ? "light" : "default"}
+              color={STATUS_BADGE_COLORS[status]}
+              size="sm"
+            >
+              {novel.status}
+            </Badge>
+          </OverviewRow>
+          <OverviewRow label="Chapters">
+            <Text className="text-sm font-medium">
+              {chapter_count} / {novel.total_chapters}
+            </Text>
+          </OverviewRow>
+          <OverviewRow label="Last action">
+            <Text c="dimmed" className="text-sm">
+              {lastAction}
+            </Text>
+          </OverviewRow>
+          <OverviewRow label="Source file">
+            <Text className="font-mono text-sm">{rawFileKey(slug)}.txt</Text>
+          </OverviewRow>
+          <OverviewRow label="Size">
+            <Group component={Text} c="dimmed" className="text-sm gap-0">
+              2.5 MB <Dot /> Uploaded {format(novel.created_at, "do MMM yyyy")}
+            </Group>
+          </OverviewRow>
+
+          <NovelStatusAlert
+            status={status}
+            chapterCount={chapter_count}
+            totalChapters={novel.total_chapters}
+            lastError={novel.last_error}
+            slug={novel.slug}
+            isParsing={startParsingMutation.isPending}
+          />
+          {startParsingMutation.error && (
+            <Alert variant="light" color="red" title="Could not start parsing">
+              {getErrorMessage(startParsingMutation.error)}
+            </Alert>
+          )}
+        </Stack>
+
+        <Divider />
+
+        <Stack className="gap-6">
+          <SectionHeading>Actions</SectionHeading>
+
+          <Group className="gap-4">
+            {(isParsing || canStartParsing) && (
+              <Tooltip withArrow label="Parsing in progress - please wait" disabled={!isParsing}>
+                <span className="inline-flex">
+                  <Button
+                    variant="default"
+                    loading={isParsing}
+                    onClick={() => startParsingMutation.mutate()}
+                  >
+                    {status === "draft" ? "Start parsing" : "Re-trigger parsing"}
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
+            <Button variant="default" disabled>
+              <Download className="size-4" />
+              Download raw file
+            </Button>
+            <Button variant="default" disabled>
+              Edit novel
+            </Button>
+            <Button variant="default" disabled>
+              Delete novel
+            </Button>
           </Group>
-        )}
-
-        {canStartParsing && (
-          <Button
-            loading={startParsingMutation.isPending}
-            loadingText="Starting"
-            onClick={() => startParsingMutation.mutate()}
-          >
-            Start parsing
-          </Button>
-        )}
-
-        {novel.status === "needs review" && (
-          <Alert variant="light" color="yellow" title="Chapter count mismatch">
-            Parsed {chapter_count} chapters but the novel declares {novel.total_chapters}. Reconcile
-            the chapter files on R2 under novels/{novel.slug}/chapters/ - the app does not re-parse
-            automatically.
-          </Alert>
-        )}
-
-        {novel.status === "failed" && (
-          <Alert variant="light" color="red" title="Parsing failed">
-            {novel.last_error ?? "Parsing failed for an unknown reason."}
-          </Alert>
-        )}
-
-        {startParsingMutation.error && (
-          <Alert variant="light" color="red" title="Could not start parsing">
-            {getErrorMessage(startParsingMutation.error)}
-          </Alert>
-        )}
+        </Stack>
       </Stack>
     );
   },

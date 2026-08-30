@@ -1,6 +1,6 @@
 import { AppShell, Container } from "@mantine/core";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { Header } from "#/components/header";
+import { Header } from "#/components/layout/header";
 import { AppModals, ModalSearchSchema } from "#/components/modals";
 import { getCreditsQueryOptions } from "#/lib/credits";
 import { getAuthState } from "#/lib/auth/session";
@@ -32,7 +32,7 @@ export const Route = createFileRoute("/_app")({
       <AppShell header={{ height: 60 }} padding="md">
         <Header />
         <AppShell.Main>
-          <Container strategy="grid" className="py-10">
+          <Container strategy="grid" className="py-4">
             <Outlet />
             <AppModals />
           </Container>

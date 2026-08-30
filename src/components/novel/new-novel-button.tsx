@@ -5,9 +5,9 @@ import { Plus } from "lucide-react";
 export function NewNovelButton() {
   return (
     <Button
-      variant="outline"
+      variant="default"
       size="compact-md"
-      classNames={{ root: "h-7 hover:text-black", label: "gap-1 text-sm font-medium" }}
+      classNames={{ root: "h-7", label: "gap-1 text-sm font-medium" }}
       renderRoot={(props) => (
         <Link to="." search={(prev) => ({ ...prev, modal: "create-novel" as const })} {...props} />
       )}
