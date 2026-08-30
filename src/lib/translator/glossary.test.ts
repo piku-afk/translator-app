@@ -112,8 +112,8 @@ describe("filterNamesBySourceText", () => {
     const names = filterNamesBySourceText(sourceText, glossary);
 
     expect(names).toEqual([
-      { sourceName: "강민수;민수 형사", englishName: "Kang Minsu;Detective Minsu" },
-      { sourceName: "서울중앙병원", englishName: "Seoul Central Hospital" },
+      { source_names: "강민수;민수 형사", english_names: "Kang Minsu;Detective Minsu" },
+      { source_names: "서울중앙병원", english_names: "Seoul Central Hospital" },
     ]);
   });
 

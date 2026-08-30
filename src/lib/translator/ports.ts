@@ -41,31 +41,22 @@ export interface ExtractionQueuePort {
 }
 
 /**
- * A source-name → English-rendering pair as the model speaks it: each side is
- * the `;`-separated variation string for the entity.
- */
-export interface ModelNamePair {
-  sourceName: string;
-  englishName: string;
-}
-
-/**
  * A glossary entry as the model sees it in the notes input: addressed by its
  * opaque numeric id, with `;`-separated variation strings.
  */
 export interface ModelNotesEntry {
   id: number;
   category: GlossaryCategory;
-  sourceName: string;
-  englishName: string;
+  source_names: string;
+  english_names: string;
   description: string;
 }
 
 /** A model-proposed new entry: no id (the application assigns it). */
 export interface ModelNotesAddition {
   category: GlossaryCategory;
-  sourceName: string;
-  englishName: string;
+  source_names: string;
+  english_names: string;
   description: string;
 }
 
@@ -83,19 +74,20 @@ export interface ModelNotesDiff {
 }
 
 /**
- * The AI-gateway model port. Two calls per chapter, pinned by the POC:
- * `getNewNames` first (new names not yet in the glossary), then `getNotesDiff`
- * (how the notes/glossary should change given those new names).
+ * The AI-gateway model port: one call per chapter that discovers new names in
+ * the source (against the existing notes' established names) and produces the
+ * notes diff to apply to the glossary.
+ *
+ * New-name discovery and the notes diff are folded into a single call because
+ * our pipeline runs the extraction walk sequentially and never feeds `new
+ * names` anywhere but the notes diff; there is no parallel translate step to
+ * hand new names to (unlike the POC), so a separate `getNewNames` round-trip
+ * would only add latency to the ADR-0001 sequential bottleneck.
  */
 export interface ModelPort {
-  getNewNames(params: {
-    sourceText: string;
-    filteredNames: ModelNamePair[];
-  }): Promise<{ newNames: ModelNamePair[] }>;
   getNotesDiff(params: {
     sourceText: string;
     filteredNotes: ModelNotesEntry[];
-    newNames: ModelNamePair[];
   }): Promise<{ notesChanges: ModelNotesDiff }>;
 }
 

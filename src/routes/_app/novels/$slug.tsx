@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { format, formatDistanceToNow } from "date-fns";
 import { Dot, Download, ArrowLeft, ArrowRight } from "lucide-react";
+import { GlossarySection } from "#/components/novel/glossary-section";
 import { NovelStatusAlert } from "#/components/novel/novel-status-alert";
 import { SectionHeading } from "#/components/ui/section-heading";
 import { getErrorMessage } from "#/lib/utils";
@@ -219,6 +220,21 @@ export const Route = createFileRoute("/_app/novels/$slug")({
               Delete novel
             </Button>
           </Group>
+        </Stack>
+
+        <Divider />
+
+        <Stack className="gap-3">
+          <SectionHeading>Glossary</SectionHeading>
+          <GlossarySection
+            slug={slug}
+            isExtracting={isExtracting}
+            canStartExtraction={canStartExtraction}
+            startExtractionLabel={
+              status === "ready" ? "Start extraction" : "Re-run extraction"
+            }
+            onStartExtraction={() => startExtractionMutation.mutate()}
+          />
         </Stack>
       </Stack>
     );

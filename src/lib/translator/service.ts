@@ -17,7 +17,6 @@ import type {
 } from "./ports";
 import {
   applyGlossaryDiff,
-  filterNamesBySourceText,
   filterNotesBySourceText,
   joinVariations,
   splitVariations,
@@ -76,6 +75,8 @@ export interface TranslatorService {
   startExtraction(slug: string): Promise<Novel>;
   /** One extraction-queue consumer invocation for a single message. */
   runExtractionJob(job: ExtractionJobMessage, attempt: number): Promise<ExtractionSettlement>;
+  /** The novel's current glossary; empty for a novel that has not been extracted. */
+  listGlossary(slug: string): Promise<Glossary>;
 }
 
 export function createTranslatorService(ports: TranslatorPorts): TranslatorService {
@@ -415,16 +416,11 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
         // Consult the cumulative glossary, filtered to this chapter's text so
         // model calls stay cheap.
         const glossary = await loadGlossary(novel.id);
-        const filteredNames = filterNamesBySourceText(sourceText, glossary);
         const filteredNotes = toModelNotes(filterNotesBySourceText(sourceText, glossary));
 
-        // The two-call model protocol, per chapter.
-        const { newNames } = await ports.model.getNewNames({ sourceText, filteredNames });
-        const { notesChanges } = await ports.model.getNotesDiff({
-          sourceText,
-          filteredNotes,
-          newNames,
-        });
+        // One combined model call discovers new names (against the established
+        // names in the notes) and produces the diff to apply to the glossary.
+        const { notesChanges } = await ports.model.getNotesDiff({ sourceText, filteredNotes });
 
         // Commit this chapter's diff to the cumulative glossary, then mark the
         // chapter `names extracted` before moving on.
@@ -468,6 +464,14 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     return { novel, chapter_count: Number(row?.chapter_count ?? 0) };
   }
 
+  async function listGlossary(slug: string): Promise<Glossary> {
+    const novel = await findNovelBySlug(slug);
+    if (!novel) {
+      throw new Error(NOVEL_NOT_FOUND_ERROR);
+    }
+    return loadGlossary(novel.id);
+  }
+
   return {
     listNovels,
     createNovel,
@@ -478,6 +482,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     getNovelDetail,
     findNovelBySlug,
     listRecentNovels,
+    listGlossary,
   };
 }
 
@@ -486,8 +491,8 @@ function toModelNotes(entries: GlossaryEntry[]): ModelNotesEntry[] {
   return entries.map((entry) => ({
     id: entry.id,
     category: entry.category,
-    sourceName: joinVariations(entry.sourceNames),
-    englishName: joinVariations(entry.englishNames),
+    source_names: joinVariations(entry.sourceNames),
+    english_names: joinVariations(entry.englishNames),
     description: entry.description,
   }));
 }
@@ -497,15 +502,15 @@ function fromModelNotesDiff(diff: ModelNotesDiff): GlossaryDiff {
   return {
     additions: diff.additions.map((addition) => ({
       category: addition.category,
-      sourceNames: splitVariations(addition.sourceName),
-      englishNames: splitVariations(addition.englishName),
+      sourceNames: splitVariations(addition.source_names),
+      englishNames: splitVariations(addition.english_names),
       description: addition.description,
     })),
     updates: diff.updates.map((update) => ({
       id: update.id,
       category: update.category,
-      sourceNames: splitVariations(update.sourceName),
-      englishNames: splitVariations(update.englishName),
+      sourceNames: splitVariations(update.source_names),
+      englishNames: splitVariations(update.english_names),
       description: update.description,
     })),
     deletions: diff.deletions.map((deletion) => ({

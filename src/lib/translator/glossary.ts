@@ -29,10 +29,11 @@ export interface GlossaryEntry {
 export type Glossary = GlossaryEntry[];
 
 /** A source-name → English-rendering pair; the only glossary material handed
- * to the translation model (ADR-0002). */
+ * to the translation model (ADR-0002). Field names match the D1
+ * `glossary_entries` columns. */
 export interface NamePair {
-  sourceName: string;
-  englishName: string;
+  source_names: string;
+  english_names: string;
 }
 
 /** A model-proposed new entry (no id yet - the application assigns it). */
@@ -120,12 +121,14 @@ export function filterNotesBySourceText(sourceText: string, entries: Glossary): 
   return entries.filter((entry) => isPresent(sourceText, entry.sourceNames));
 }
 
-/** Name pairs (sourceName/englishName, `;`-joined) for the entries relevant to
- * the chapter's text - the input to getNewNames. */
+/** Name pairs (source_names/english_names, `;`-joined) for the entries
+ * relevant to the chapter's text. Not consumed by extraction (the model now
+ * discovers names within the single notes-diff call); this is the input the
+ * translation stage (issue #6) feeds the translation model. */
 export function filterNamesBySourceText(sourceText: string, entries: Glossary): NamePair[] {
   return filterNotesBySourceText(sourceText, entries).map((entry) => ({
-    sourceName: joinVariations(entry.sourceNames),
-    englishName: joinVariations(entry.englishNames),
+    source_names: joinVariations(entry.sourceNames),
+    english_names: joinVariations(entry.englishNames),
   }));
 }
 
@@ -136,17 +139,25 @@ function maxId(entries: Glossary): number {
 
 /**
  * Apply a model diff to a glossary without ever duplicating an entity - the
- * "no duplicate entities" guarantee across re-runs.
+ * "no duplicate entities" guarantee across re-runs. Pure and DB-agnostic: it
+ * operates on the in-memory glossary and returns the merged result, and the
+ * service syncs that result to D1 afterwards.
  *
  * - Deletions remove entries by id.
  * - Updates replace an entry's fields; aliases are trimmed and deduped.
  * - An addition whose alias set collides with an existing entry (same category,
  *   shared source alias) is merged into it rather than inserted; otherwise it
- *   is inserted with the next free id.
+ *   is inserted with a new id.
  *
- * New entries are assigned ids strictly above the original glossary's max id
- * (computed before deletions), so a caller can distinguish a genuinely new
- * entry from an updated one by id alone.
+ * Where ids come from: the DB owns the *persisted* identity. The service
+ * inserts new rows without an id and lets D1's auto-increment assign it, so
+ * the ids this module hands back for additions are never written to the DB.
+ * They exist only for this in-memory merge: every entry must be addressable
+ * while a diff is applied (e.g. a later addition can merge into an earlier
+ * just-added addition), and the model addresses updates/deletions by id. New
+ * entries get ids strictly above the original max id (computed before
+ * deletions), so a caller can distinguish a genuinely new entry from an
+ * updated one by id alone.
  */
 export function applyGlossaryDiff(glossary: Glossary, diff: GlossaryDiff): Glossary {
   let entries = glossary.map((entry) => ({

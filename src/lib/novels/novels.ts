@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAuth } from "#/lib/auth/session.server";
+import type { Glossary } from "../translator/glossary";
 import { NOVEL_NOT_FOUND_ERROR, type NovelDetail, type NovelSummary } from "../translator/service";
 import { translatorService } from "../translator/translator.server";
 import { CreateNovelSchema, type Novel } from "./novels-core";
@@ -8,6 +9,7 @@ import { CreateNovelSchema, type Novel } from "./novels-core";
 export const novelsQueryKey = ["novels"] as const;
 export const recentNovelsQueryKey = ["novels", "recent"] as const;
 export const novelDetailQueryKey = (slug: string) => ["novels", slug] as const;
+export const glossaryQueryKey = (slug: string) => ["novels", slug, "glossary"] as const; // nested under the detail key so it invalidates with the novel
 
 const SlugSchema = z.object({ slug: z.string().min(1) });
 
@@ -60,4 +62,15 @@ export function getRecentNovelsQueryOptions() {
 
 export function getNovelDetailQueryOptions(slug: string) {
   return { queryFn: () => getNovelDetail({ data: { slug } }), queryKey: novelDetailQueryKey(slug) };
+}
+
+const getGlossary = createServerFn()
+  .validator(SlugSchema)
+  .handler(async ({ data }): Promise<Glossary> => {
+    await requireAuth();
+    return translatorService.listGlossary(data.slug);
+  });
+
+export function getGlossaryQueryOptions(slug: string) {
+  return { queryFn: () => getGlossary({ data: { slug } }), queryKey: glossaryQueryKey(slug) };
 }

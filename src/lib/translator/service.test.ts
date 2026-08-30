@@ -85,7 +85,7 @@ function createMemoryQueue(): ParseQueuePort & {
 }
 
 interface FakeModel extends ModelPort {
-  calls: Array<{ chapterNumber: number; fn: "getNewNames" | "getNotesDiff"; sourceText: string }>;
+  calls: Array<{ chapterNumber: number; fn: "getNotesDiff"; sourceText: string }>;
   setFailing(failing: boolean): void;
 }
 
@@ -102,23 +102,18 @@ function createFakeModel(): FakeModel {
     setFailing(next) {
       failing = next;
     },
-    async getNewNames({ sourceText }) {
-      calls.push({ chapterNumber: 0, fn: "getNewNames", sourceText });
-      if (failing) throw new Error("model unavailable");
-      return {
-        newNames: [{ sourceName: `신규${sourceText.slice(0, 1)}`, englishName: `New${sourceText.slice(0, 1)}` }],
-      };
-    },
-    async getNotesDiff({ sourceText, newNames }) {
+    async getNotesDiff({ sourceText }) {
       calls.push({ chapterNumber: 0, fn: "getNotesDiff", sourceText });
       if (failing) throw new Error("model unavailable");
       const notes: ModelNotesDiff = {
-        additions: newNames.map((name) => ({
-          category: "characters",
-          sourceName: name.sourceName,
-          englishName: name.englishName,
-          description: "New character from this chapter",
-        })),
+        additions: [
+          {
+            category: "characters",
+            source_names: `신규${sourceText.slice(0, 1)}`,
+            english_names: `New${sourceText.slice(0, 1)}`,
+            description: "New character from this chapter",
+          },
+        ],
         updates: [],
         deletions: [],
       };
@@ -554,7 +549,7 @@ describe("runExtractionJob", () => {
 
     await service.runExtractionJob({ novelId: novel.id }, 1);
 
-    expect(model.calls.map((c) => c.fn)).toEqual(["getNewNames", "getNotesDiff"]);
+    expect(model.calls.map((c) => c.fn)).toEqual(["getNotesDiff"]);
     expect(model.calls[0].sourceText).toContain("1화");
   });
 
@@ -572,7 +567,7 @@ describe("runExtractionJob", () => {
 
     expect(settlement).toEqual({ outcome: "ack" });
     // Only chapter 2 was fed to the model.
-    expect(model.calls.filter((c) => c.fn === "getNewNames")).toHaveLength(1);
+    expect(model.calls.filter((c) => c.fn === "getNotesDiff")).toHaveLength(1);
     expect(model.calls[0].sourceText).toContain("2화");
     const chapters = await db.selectFrom("chapters").selectAll().orderBy("number").execute();
     expect(chapters.map((c) => c.status)).toEqual(["names extracted", "names extracted"]);
@@ -658,5 +653,37 @@ describe("getNovelDetail", () => {
     const { service } = await makeService();
 
     expect(await service.getNovelDetail("missing")).toBeUndefined();
+  });
+});
+
+describe("listGlossary", () => {
+  it("returns the glossary committed by extraction, split into variation arrays", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedNovel(db, { status: "extracting", total_chapters: 2 });
+    await seedChapter(db, novel.id, 1);
+    await seedChapter(db, novel.id, 2);
+    await storage.put(chapterFileKey(novel.slug, 1), "1화.\n첫번째 본문입니다.");
+    await storage.put(chapterFileKey(novel.slug, 2), "2화.\n두번째 본문입니다.");
+
+    await service.runExtractionJob({ novelId: novel.id }, 1);
+
+    const glossary = await service.listGlossary(novel.slug);
+    expect(glossary.map((entry) => entry.category)).toEqual(["characters", "characters"]);
+    expect(glossary[0].sourceNames).toContain("신규1");
+    expect(glossary[1].sourceNames).toContain("신규2");
+    expect(glossary[0].englishNames[0]).toBe("New1");
+  });
+
+  it("returns an empty glossary for a novel that has not been extracted", async () => {
+    const { db, service } = await makeService();
+    await seedNovel(db);
+
+    expect(await service.listGlossary("the-beginning")).toEqual([]);
+  });
+
+  it("throws NOVEL_NOT_FOUND_ERROR for an unknown slug", async () => {
+    const { service } = await makeService();
+
+    await expect(service.listGlossary("missing")).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
   });
 });
