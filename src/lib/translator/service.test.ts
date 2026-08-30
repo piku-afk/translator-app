@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { up as createNovelsTable } from "../../../migrations/001_create_novels.ts";
 import { up as rebuildNovelsCreateChapters } from "../../../migrations/003_add_failed_status_and_chapters.ts";
 import { up as createGlossaryAndStageStatuses } from "../../../migrations/004_create_glossary_and_stage_statuses.ts";
+import { up as createActivity } from "../../../migrations/005_create_activity.ts";
 import type { Database } from "../database/database";
 import {
   DUPLICATE_NOVEL_ERROR,
@@ -39,6 +40,7 @@ async function createTestDb(): Promise<Kysely<Database>> {
     createNovelsTable,
     rebuildNovelsCreateChapters,
     createGlossaryAndStageStatuses,
+    createActivity,
   ]) {
     await up(db);
   }
@@ -215,6 +217,21 @@ describe("createNovel", () => {
     await expect(service.createNovel(validInput)).rejects.toThrow(DUPLICATE_NOVEL_ERROR);
     expect(storage.putCount()).toBe(0);
   });
+
+  it("records a novel-created activity row once the insert succeeds", async () => {
+    const { db, service } = await makeService();
+
+    const novel = await service.createNovel(validInput);
+
+    const rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      novel_id: novel.id,
+      novel_name: "The Beginning",
+      action: "novel created",
+      detail: null,
+    });
+  });
 });
 
 describe("listNovels", () => {
@@ -332,6 +349,29 @@ describe("startParsing", () => {
     expect(reverted.status).toBe("parsing failed");
     expect(parseQueue.jobs).toEqual([]);
   });
+
+  it("records a parsing-started row only after the enqueue succeeds, and never on a rolled-back enqueue", async () => {
+    const { db, parseQueue, service } = await makeService();
+    const novel = await seedNovel(db);
+
+    await service.startParsing(novel.slug);
+    let rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows.map((r) => r.action)).toEqual(["parsing started"]);
+    expect(rows[0].novel_name).toBe(novel.name);
+
+    // Reset to a start-eligible status, then make the enqueue fail and revert.
+    await db
+      .updateTable("novels")
+      .set({ status: "parsing failed", last_error: "boom", updated_at: new Date().toISOString() })
+      .where("id", "=", novel.id)
+      .execute();
+    parseQueue.setFailing(true);
+    await expect(service.startParsing(novel.slug)).rejects.toThrow("queue unavailable");
+    rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows).toHaveLength(1);
+    const reverted = await refetchNovel(db, novel.id);
+    expect(reverted.status).toBe("parsing failed");
+  });
 });
 
 describe("runParseJob", () => {
@@ -382,6 +422,26 @@ describe("runParseJob", () => {
     expect(updated.status).toBe("needs review");
   });
 
+  it("records parsing-ready on success and needs-review with the mismatch on a count mismatch", async () => {
+    const { db, storage, service } = await makeService();
+    const matching = await seedNovel(db, { status: "parsing", total_chapters: 1 });
+    await seedRaw(storage, matching.slug, [1]);
+    await service.runParseJob({ novelId: matching.id }, 1);
+
+    const mismatching = await seedNovel(db, {
+      slug: "mismatching",
+      status: "parsing",
+      total_chapters: 3,
+    });
+    await seedRaw(storage, mismatching.slug, [1, 2]);
+    await service.runParseJob({ novelId: mismatching.id }, 1);
+
+    const rows = await db.selectFrom("activity").selectAll().orderBy("id").execute();
+    expect(rows.map((r) => r.action)).toEqual(["parsing ready", "needs review"]);
+    expect(rows[1].detail).toBe("2 ≠ 3");
+    expect(rows[1].novel_name).toBe(mismatching.name);
+  });
+
   it("clears a stale last_error when parsing succeeds", async () => {
     const { db, storage, service } = await makeService();
     const novel = await seedNovel(db, { status: "parsing", total_chapters: 1, last_error: "boom" });
@@ -429,6 +489,30 @@ describe("runParseJob", () => {
     const updated = await refetchNovel(db, novel.id);
     expect(updated.status).toBe("parsing failed");
     expect(updated.last_error).toContain("Raw file missing");
+  });
+
+  it("records parsing-failed only on retry exhaustion, not on a transient retry", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "parsing", total_chapters: 2 });
+
+    // A transient failure requests a retry and records nothing.
+    expect((await service.runParseJob({ novelId: novel.id }, 1)).outcome).toBe("retry");
+    expect(await db.selectFrom("activity").selectAll().execute()).toHaveLength(0);
+
+    // Exhaustion finalizes, and only then records the failure.
+    expect((await service.runParseJob({ novelId: novel.id }, PARSE_MAX_RETRIES)).outcome).toBe(
+      "ack",
+    );
+    const rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows.map((r) => r.action)).toEqual(["parsing failed"]);
+    expect(rows[0].novel_name).toBe(novel.name);
+  });
+
+  it("records no activity for a stale or unknown-novel ack", async () => {
+    const { db, service } = await makeService();
+
+    await service.runParseJob({ novelId: 4242 }, 1);
+    expect(await db.selectFrom("activity").selectAll().execute()).toHaveLength(0);
   });
 
   it("acks stale messages for novels no longer parsing", async () => {
@@ -506,6 +590,29 @@ describe("startExtraction", () => {
     const reverted = await refetchNovel(db, novel.id);
     expect(reverted.status).toBe("extraction failed");
     expect(extractionQueue.jobs).toEqual([]);
+  });
+
+  it("records an extraction-started row only after the enqueue succeeds, and never on a rolled-back enqueue", async () => {
+    const { db, extractionQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "ready" });
+
+    await service.startExtraction(novel.slug);
+    let rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows.map((r) => r.action)).toEqual(["extraction started"]);
+    expect(rows[0].novel_name).toBe(novel.name);
+
+    // Reset to a start-eligible status, then make the enqueue fail and revert.
+    await db
+      .updateTable("novels")
+      .set({ status: "extraction failed", last_error: "boom", updated_at: new Date().toISOString() })
+      .where("id", "=", novel.id)
+      .execute();
+    extractionQueue.setFailing(true);
+    await expect(service.startExtraction(novel.slug)).rejects.toThrow("queue unavailable");
+    rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows).toHaveLength(1);
+    const reverted = await refetchNovel(db, novel.id);
+    expect(reverted.status).toBe("extraction failed");
   });
 });
 
@@ -610,6 +717,35 @@ describe("runExtractionJob", () => {
     expect(updated.last_error).toContain("model unavailable");
   });
 
+  it("records names-extracted on success", async () => {
+    const { db, storage, service } = await makeService();
+    const novel = await seedExtractionNovel(db, storage, [1]);
+
+    await service.runExtractionJob({ novelId: novel.id }, 1);
+
+    const rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows.map((r) => r.action)).toEqual(["names extracted"]);
+    expect(rows[0].novel_name).toBe(novel.name);
+  });
+
+  it("records extraction-failed only on retry exhaustion, not on a transient retry", async () => {
+    const { db, model, storage, service } = await makeService();
+    const novel = await seedExtractionNovel(db, storage, [1]);
+    model.setFailing(true);
+
+    // A transient failure requests a retry and records nothing.
+    expect((await service.runExtractionJob({ novelId: novel.id }, 1)).outcome).toBe("retry");
+    let rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows).toHaveLength(0);
+
+    // Exhaustion finalizes, and only then records the failure.
+    expect(
+      (await service.runExtractionJob({ novelId: novel.id }, EXTRACTION_MAX_RETRIES)).outcome,
+    ).toBe("ack");
+    rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows.map((r) => r.action)).toEqual(["extraction failed"]);
+  });
+
   it("acks stale messages for novels no longer extracting", async () => {
     const { db, service } = await makeService();
     const novel = await seedNovel(db, { status: "ready" });
@@ -685,5 +821,79 @@ describe("listGlossary", () => {
     const { service } = await makeService();
 
     await expect(service.listGlossary("missing")).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
+  });
+});
+
+/** Insert an activity row directly, bypassing the service, to arrange state. */
+async function seedActivity(
+  db: Kysely<Database>,
+  overrides: Partial<{
+    novel_id: number;
+    novel_name: string;
+    action: string;
+    detail: string | null;
+    created_at: string;
+  }> = {},
+): Promise<void> {
+  await db
+    .insertInto("activity")
+    .values({
+      novel_id: 1,
+      novel_name: "The Beginning",
+      action: "novel created",
+      detail: null,
+      created_at: "2026-01-01T00:00:00.000Z",
+      ...overrides,
+    })
+    .execute();
+}
+
+describe("listRecentActivities", () => {
+  it("returns the most recent activity across all novels, newest first, capped at the limit", async () => {
+    const { db, service } = await makeService();
+    const first = await seedNovel(db, { slug: "first" });
+    const second = await seedNovel(db, { slug: "second" });
+    await seedActivity(db, { novel_id: first.id, created_at: "2026-01-01T00:00:00.000Z" });
+    await seedActivity(db, {
+      novel_id: second.id,
+      action: "parsing ready",
+      created_at: "2026-01-03T00:00:00.000Z",
+    });
+    await seedActivity(db, { novel_id: first.id, action: "parsing failed", created_at: "2026-01-02T00:00:00.000Z" });
+
+    const rows = await service.listRecentActivities(2);
+
+    expect(rows.map((r) => r.action)).toEqual(["parsing ready", "parsing failed"]);
+    expect(rows).toHaveLength(2);
+  });
+});
+
+describe("listActivitiesForNovel", () => {
+  it("returns one novel's full history in chronological (oldest-first) order", async () => {
+    const { db, service } = await makeService();
+    const first = await seedNovel(db, { slug: "first" });
+    const second = await seedNovel(db, { slug: "second" });
+    await seedActivity(db, { novel_id: first.id, created_at: "2026-01-01T00:00:00.000Z" });
+    await seedActivity(db, {
+      novel_id: first.id,
+      action: "parsing started",
+      created_at: "2026-01-02T00:00:00.000Z",
+    });
+    await seedActivity(db, {
+      novel_id: second.id,
+      action: "parsing ready",
+      created_at: "2026-01-03T00:00:00.000Z",
+    });
+
+    const rows = await service.listActivitiesForNovel(first.id);
+
+    expect(rows.map((r) => r.action)).toEqual(["novel created", "parsing started"]);
+    expect(rows.every((r) => r.novel_id === first.id)).toBe(true);
+  });
+
+  it("returns an empty list for a novel with no activity", async () => {
+    const { service } = await makeService();
+
+    expect(await service.listActivitiesForNovel(4242)).toEqual([]);
   });
 });

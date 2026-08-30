@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CreateNovelSchema, rawFileKey, toSlug, type CreateNovelInput } from "./novels-core";
+import {
+  CreateNovelSchema,
+  activityText,
+  rawFileKey,
+  toSlug,
+  type CreateNovelInput,
+} from "./novels-core";
 
 const validInput: CreateNovelInput = {
   name: "The Beginning",
@@ -48,5 +54,63 @@ describe("toSlug", () => {
 describe("rawFileKey", () => {
   it("namespaces the raw file under the novel's folder", () => {
     expect(rawFileKey("the-beginning")).toBe("novels/the-beginning/raw");
+  });
+});
+
+describe("activityText", () => {
+  const ago = "2 minutes ago";
+
+  it("renders novel created", () => {
+    expect(activityText("novel created", "The Beginning", ago)).toBe(
+      'Created "The Beginning" 2 minutes ago',
+    );
+  });
+
+  it("renders parsing started", () => {
+    expect(activityText("parsing started", "The Beginning", ago)).toBe(
+      '"The Beginning" parsing started 2 minutes ago',
+    );
+  });
+
+  it("renders parsing ready", () => {
+    expect(activityText("parsing ready", "The Beginning", ago)).toBe(
+      '"The Beginning" is ready for extraction 2 minutes ago',
+    );
+  });
+
+  it("renders needs review with the chapter-count mismatch from detail", () => {
+    expect(activityText("needs review", "The Beginning", ago, "4 ≠ 5")).toBe(
+      '"The Beginning" needs review — chapter count mismatch (4 ≠ 5) 2 minutes ago',
+    );
+  });
+
+  it("renders needs review without detail when none is recorded", () => {
+    expect(activityText("needs review", "The Beginning", ago, null)).toBe(
+      '"The Beginning" needs review — chapter count mismatch () 2 minutes ago',
+    );
+  });
+
+  it("renders parsing failed", () => {
+    expect(activityText("parsing failed", "The Beginning", ago)).toBe(
+      '"The Beginning" parsing failed 2 minutes ago',
+    );
+  });
+
+  it("renders extraction started", () => {
+    expect(activityText("extraction started", "The Beginning", ago)).toBe(
+      '"The Beginning" name extraction started 2 minutes ago',
+    );
+  });
+
+  it("renders names extracted", () => {
+    expect(activityText("names extracted", "The Beginning", ago)).toBe(
+      '"The Beginning" names extracted 2 minutes ago',
+    );
+  });
+
+  it("renders extraction failed", () => {
+    expect(activityText("extraction failed", "The Beginning", ago)).toBe(
+      '"The Beginning" extraction failed 2 minutes ago',
+    );
   });
 });

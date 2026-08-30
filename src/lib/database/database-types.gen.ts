@@ -9,6 +9,15 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export interface Activity {
+  action: string;
+  created_at: string;
+  detail: string | null;
+  id: Generated<number>;
+  novel_id: number;
+  novel_name: string;
+}
+
 export interface Chapters {
   created_at: string;
   id: Generated<number>;
@@ -51,6 +60,7 @@ export interface Novels {
 }
 
 export interface DB {
+  activity: Activity;
   chapters: Chapters;
   glossary_entries: GlossaryEntries;
   greetings: Greetings;
