@@ -40,7 +40,7 @@ export function NovelCard({ novel }: { novel: NovelSummary }) {
         </Group>
 
         <Text c="dimmed" className="text-xs font-medium line-clamp-1">
-          {novel.status === "failed"
+          {novel.status === "parsing failed" || novel.status === "extraction failed"
             ? (novel.last_error ?? `Failed ${parsedAt}`)
             : `${STATUS_ACTION_VERBS[novel.status as NovelStatus]} ${parsedAt}`}
         </Text>

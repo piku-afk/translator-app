@@ -18,6 +18,17 @@ export interface Chapters {
   updated_at: string;
 }
 
+export interface GlossaryEntries {
+  category: string;
+  created_at: string;
+  description: string;
+  english_names: string;
+  id: Generated<number>;
+  novel_id: number;
+  source_names: string;
+  updated_at: string;
+}
+
 export interface Greetings {
   created_at: string;
   days: string | null;
@@ -41,6 +52,7 @@ export interface Novels {
 
 export interface DB {
   chapters: Chapters;
+  glossary_entries: GlossaryEntries;
   greetings: Greetings;
   novels: Novels;
 }

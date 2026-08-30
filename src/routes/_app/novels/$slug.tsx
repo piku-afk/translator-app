@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { format, formatDistanceToNow } from "date-fns";
 import { Dot, Download, ArrowLeft, ArrowRight } from "lucide-react";
+import { GlossarySection } from "#/components/novel/glossary-section";
 import { NovelStatusAlert } from "#/components/novel/novel-status-alert";
 import { SectionHeading } from "#/components/ui/section-heading";
 import { getErrorMessage } from "#/lib/utils";
@@ -10,6 +11,7 @@ import {
   getNovelDetailQueryOptions,
   novelDetailQueryKey,
   novelsQueryKey,
+  startExtraction,
   startParsing,
 } from "#/lib/novels/novels";
 import { STATUS_ACTION_VERBS, STATUS_BADGE_COLORS } from "#/lib/novels/status-metadata";
@@ -45,15 +47,28 @@ export const Route = createFileRoute("/_app/novels/$slug")({
     const { slug } = Route.useParams();
     const queryClient = useQueryClient();
 
-    // Keep the page live while a parse job runs: poll until the novel leaves
-    // `parsing` so the transition to ready/needs review/failed shows up.
+    // Keep the page live while a parse or extraction job runs: poll until the
+    // novel leaves `parsing`/`extracting` so the transition to its terminal
+    // status shows up.
     const { data: detail } = useQuery({
       ...getNovelDetailQueryOptions(slug),
-      refetchInterval: (query) => (query.state.data?.novel.status === "parsing" ? 3000 : false),
+      refetchInterval: (query) =>
+        query.state.data?.novel.status === "parsing" ||
+        query.state.data?.novel.status === "extracting"
+          ? 3000
+          : false,
     });
 
     const startParsingMutation = useMutation({
       mutationFn: () => startParsing({ data: { slug } }),
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
+        await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
+      },
+    });
+
+    const startExtractionMutation = useMutation({
+      mutationFn: () => startExtraction({ data: { slug } }),
       onSuccess: async () => {
         await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
         await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
@@ -66,12 +81,16 @@ export const Route = createFileRoute("/_app/novels/$slug")({
 
     const { novel, chapter_count } = detail;
     const status = novel.status as NovelStatus;
-    const canStartParsing = status === "draft" || status === "failed" || status === "needs review";
+    const canStartParsing =
+      status === "draft" || status === "parsing failed" || status === "needs review";
+    const canStartExtraction =
+      status === "ready" || status === "names extracted" || status === "extraction failed";
     const isParsing = status === "parsing" || startParsingMutation.isPending;
+    const isExtracting = status === "extracting" || startExtractionMutation.isPending;
 
     // novel-card's language for the last action, with the same updated_at proxy.
     const lastAction =
-      status === "parsing"
+      status === "parsing" || status === "extracting"
         ? `${STATUS_ACTION_VERBS[status]} ${formatDistanceToNow(novel.updated_at, { addSuffix: true })}`
         : `${STATUS_ACTION_VERBS[status]} ${format(novel.updated_at, "do MMM yyyy 'at' HH:mm")}`;
 
@@ -140,10 +159,16 @@ export const Route = createFileRoute("/_app/novels/$slug")({
             lastError={novel.last_error}
             slug={novel.slug}
             isParsing={startParsingMutation.isPending}
+            isExtracting={startExtractionMutation.isPending}
           />
           {startParsingMutation.error && (
             <Alert variant="light" color="red" title="Could not start parsing">
               {getErrorMessage(startParsingMutation.error)}
+            </Alert>
+          )}
+          {startExtractionMutation.error && (
+            <Alert variant="light" color="red" title="Could not start extraction">
+              {getErrorMessage(startExtractionMutation.error)}
             </Alert>
           )}
         </Stack>
@@ -167,6 +192,23 @@ export const Route = createFileRoute("/_app/novels/$slug")({
                 </span>
               </Tooltip>
             )}
+            {(isExtracting || canStartExtraction) && (
+              <Tooltip
+                withArrow
+                label="Extraction in progress - please wait"
+                disabled={!isExtracting}
+              >
+                <span className="inline-flex">
+                  <Button
+                    variant="default"
+                    loading={isExtracting}
+                    onClick={() => startExtractionMutation.mutate()}
+                  >
+                    {status === "ready" ? "Start extraction" : "Re-run extraction"}
+                  </Button>
+                </span>
+              </Tooltip>
+            )}
             <Button variant="default" disabled>
               <Download className="size-4" />
               Download raw file
@@ -178,6 +220,21 @@ export const Route = createFileRoute("/_app/novels/$slug")({
               Delete novel
             </Button>
           </Group>
+        </Stack>
+
+        <Divider />
+
+        <Stack className="gap-3">
+          <SectionHeading>Glossary</SectionHeading>
+          <GlossarySection
+            slug={slug}
+            isExtracting={isExtracting}
+            canStartExtraction={canStartExtraction}
+            startExtractionLabel={
+              status === "ready" ? "Start extraction" : "Re-run extraction"
+            }
+            onStartExtraction={() => startExtractionMutation.mutate()}
+          />
         </Stack>
       </Stack>
     );

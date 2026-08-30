@@ -5,11 +5,13 @@ export const STATUS_BADGE_COLORS: Record<NovelStatus, string> = {
   draft: "gray",
   parsing: "blue",
   "needs review": "yellow",
+  "parsing failed": "red",
   extracting: "blue",
+  "names extracted": "green",
+  "extraction failed": "red",
   translating: "blue",
   ready: "green",
   completed: "green",
-  failed: "red",
 };
 
 /** Verb phrase describing the most recent action, used in status lines. */
@@ -17,9 +19,11 @@ export const STATUS_ACTION_VERBS: Record<NovelStatus, string> = {
   draft: "Created",
   parsing: "Started parsing",
   "needs review": "Parsed",
+  "parsing failed": "Failed",
   extracting: "Started extracting",
+  "names extracted": "Extracted",
+  "extraction failed": "Failed",
   translating: "Started translating",
   ready: "Reviewed",
   completed: "Completed",
-  failed: "Failed",
 };

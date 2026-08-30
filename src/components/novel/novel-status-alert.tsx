@@ -9,6 +9,7 @@ export function NovelStatusAlert({
   lastError,
   slug,
   isParsing,
+  isExtracting,
 }: {
   status: NovelStatus;
   chapterCount: number;
@@ -16,12 +17,20 @@ export function NovelStatusAlert({
   lastError: string | null;
   slug: string;
   isParsing: boolean;
+  isExtracting: boolean;
 }) {
-  const color = STATUS_BADGE_COLORS[isParsing ? "parsing" : status];
+  const color = STATUS_BADGE_COLORS[isParsing ? "parsing" : isExtracting ? "extracting" : status];
   if (isParsing) {
     return (
       <Alert variant="light" color={color} title="Parsing in progress">
         Chapters will appear here when the job completes.
+      </Alert>
+    );
+  }
+  if (isExtracting) {
+    return (
+      <Alert variant="light" color={color} title="Extraction in progress">
+        The glossary is being built chapter by chapter.
       </Alert>
     );
   }
@@ -39,11 +48,30 @@ export function NovelStatusAlert({
           R2 (novels/{slug}/chapters/) to reconcile, then re-trigger parsing.
         </Alert>
       );
-    case "failed":
+    case "parsing failed":
       return (
         <Alert variant="light" color={color} title="Parsing failed">
           {lastError ?? "Parsing failed for an unknown reason"}. Fix the raw file and re-trigger
           parsing.
+        </Alert>
+      );
+    case "extraction failed":
+      return (
+        <Alert variant="light" color={color} title="Extraction failed">
+          {lastError ?? "Extraction failed for an unknown reason"}. Re-trigger extraction to
+          resume from the last completed chapter.
+        </Alert>
+      );
+    case "names extracted":
+      return (
+        <Alert variant="light" color={color} title="Names extracted">
+          The glossary is complete. The novel is ready for translation.
+        </Alert>
+      );
+    case "extracting":
+      return (
+        <Alert variant="light" color={color} title="Extraction in progress">
+          The glossary is being built chapter by chapter.
         </Alert>
       );
     case "ready":

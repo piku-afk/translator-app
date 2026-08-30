@@ -1,6 +1,11 @@
 import { env } from "cloudflare:workers";
 import { createDb } from "../database/database";
-import type { ParseJobMessage, TranslatorPorts } from "./ports";
+import { createGatewayModel } from "./gateway-model";
+import type {
+  ExtractionJobMessage,
+  ParseJobMessage,
+  TranslatorPorts,
+} from "./ports";
 import { createTranslatorService } from "./service";
 
 /**
@@ -24,6 +29,12 @@ const ports: TranslatorPorts = {
       await env.PARSE_QUEUE.send(job);
     },
   },
+  extractionQueue: {
+    async enqueue(job: ExtractionJobMessage) {
+      await env.EXTRACTION_QUEUE.send(job);
+    },
+  },
+  model: createGatewayModel(env.EXTRACTION_MODEL_ID),
 };
 
 export const translatorService = createTranslatorService(ports);
