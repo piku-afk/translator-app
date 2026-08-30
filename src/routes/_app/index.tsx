@@ -3,14 +3,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Greeting, GreetingSkeleton } from "#/components/greeting";
 import { NovelList, NovelListSkeleton } from "#/components/novel/novel-list";
 import { getGreetingDataQueryOptions } from "#/lib/greetings/greetings";
-import { getRecentNovelsQueryOptions } from "#/lib/novels/novels";
+import { getRecentActivitiesQueryOptions, getRecentNovelsQueryOptions } from "#/lib/novels/novels";
 import { Suspense } from "react";
 import { NewNovelButton } from "#/components/novel/new-novel-button";
+import { ActivityFeed, ActivityFeedSkeleton } from "#/components/novel/activity-feed";
 
 export const Route = createFileRoute("/_app/")({
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(getGreetingDataQueryOptions());
     context.queryClient.prefetchQuery(getRecentNovelsQueryOptions());
+    context.queryClient.prefetchQuery(getRecentActivitiesQueryOptions());
   },
   component: function HomePage() {
     return (
@@ -38,6 +40,10 @@ export const Route = createFileRoute("/_app/")({
           <Title order={2} className="text-xl font-medium text-foreground" aria-level={2}>
             Recent Activity
           </Title>
+
+          <Suspense fallback={<ActivityFeedSkeleton />}>
+            <ActivityFeed />
+          </Suspense>
         </Box>
       </Stack>
     );

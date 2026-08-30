@@ -5,10 +5,12 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Dot, Download, ArrowLeft, ArrowRight } from "lucide-react";
 import { GlossarySection } from "#/components/novel/glossary-section";
 import { NovelStatusAlert } from "#/components/novel/novel-status-alert";
+import { NovelHistory } from "#/components/novel/novel-history";
 import { SectionHeading } from "#/components/ui/section-heading";
 import { getErrorMessage } from "#/lib/utils";
 import {
   getNovelDetailQueryOptions,
+  novelActivityQueryKey,
   novelDetailQueryKey,
   novelsQueryKey,
   startExtraction,
@@ -64,6 +66,7 @@ export const Route = createFileRoute("/_app/novels/$slug")({
       onSuccess: async () => {
         await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
         await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
+        await queryClient.invalidateQueries({ queryKey: novelActivityQueryKey(slug) });
       },
     });
 
@@ -72,6 +75,7 @@ export const Route = createFileRoute("/_app/novels/$slug")({
       onSuccess: async () => {
         await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
         await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
+        await queryClient.invalidateQueries({ queryKey: novelActivityQueryKey(slug) });
       },
     });
 
@@ -235,6 +239,13 @@ export const Route = createFileRoute("/_app/novels/$slug")({
             }
             onStartExtraction={() => startExtractionMutation.mutate()}
           />
+        </Stack>
+
+        <Divider />
+
+        <Stack className="gap-3">
+          <SectionHeading>History</SectionHeading>
+          <NovelHistory slug={slug} isActive={isParsing || isExtracting} />
         </Stack>
       </Stack>
     );

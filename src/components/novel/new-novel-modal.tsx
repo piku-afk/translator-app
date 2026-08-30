@@ -18,7 +18,7 @@ import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, Upload, X } from "lucide-react";
 import { z } from "zod";
-import { createNovel, novelsQueryKey } from "#/lib/novels/novels";
+import { createNovel, novelsQueryKey, recentActivitiesQueryKey } from "#/lib/novels/novels";
 import {
   NovelNameSchema,
   SOURCE_LANGUAGE_OPTIONS,
@@ -64,6 +64,7 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
         color: "green",
       });
       await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
+      await queryClient.invalidateQueries({ queryKey: recentActivitiesQueryKey });
     },
   });
 

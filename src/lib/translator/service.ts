@@ -57,11 +57,13 @@ export interface NovelDetail {
 /** A novel plus the number of parsed chapter rows, for list views. */
 export type NovelSummary = Novel & { parsed_chapters: number };
 
-/** A recorded Activity row as the readers return it. */
+/** A recorded Activity row as the readers return it. `slug` is fetched by
+ * joining novels so the UI can link to the novel's detail page. */
 export interface ActivityRow {
   id: number;
   novel_id: number;
   novel_name: string;
+  slug: string;
   action: ActivityAction;
   detail: string | null;
   created_at: string;
@@ -225,8 +227,17 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
   async function listRecentActivities(limit: number): Promise<ActivityRow[]> {
     const rows = await db
       .selectFrom("activity")
-      .selectAll()
-      .orderBy("created_at", "desc")
+      .innerJoin("novels", "novels.id", "activity.novel_id")
+      .select((_eb) => [
+        "activity.id",
+        "activity.novel_id",
+        "activity.novel_name",
+        "activity.action",
+        "activity.detail",
+        "activity.created_at",
+        "novels.slug",
+      ])
+      .orderBy("activity.created_at", "desc")
       .limit(limit)
       .execute();
     return rows.map(toActivityRow);
@@ -235,9 +246,18 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
   async function listActivitiesForNovel(novelId: number): Promise<ActivityRow[]> {
     const rows = await db
       .selectFrom("activity")
-      .selectAll()
-      .where("novel_id", "=", novelId)
-      .orderBy("created_at", "asc")
+      .innerJoin("novels", "novels.id", "activity.novel_id")
+      .select((_eb) => [
+        "activity.id",
+        "activity.novel_id",
+        "activity.novel_name",
+        "activity.action",
+        "activity.detail",
+        "activity.created_at",
+        "novels.slug",
+      ])
+      .where("activity.novel_id", "=", novelId)
+      .orderBy("activity.created_at", "asc")
       .execute();
     return rows.map(toActivityRow);
   }
@@ -624,6 +644,7 @@ function toActivityRow(row: {
   id: number;
   novel_id: number;
   novel_name: string;
+  slug: string;
   action: string;
   detail: string | null;
   created_at: string;
