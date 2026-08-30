@@ -31,7 +31,7 @@ const listRecentNovels = createServerFn().handler(async (): Promise<NovelSummary
 // limit 5: the home page's Recent Activity feed stays scannable; the DB reader
 // caps it at read time. No per-function requireAuth - the _app layout guards the
 // page, mirroring listRecentNovels.
-export const HOME_ACTIVITY_LIMIT = 5;
+const HOME_ACTIVITY_LIMIT = 5;
 
 const listRecentActivities = createServerFn().handler(async (): Promise<ActivityRow[]> => {
   return translatorService.listRecentActivities(HOME_ACTIVITY_LIMIT);

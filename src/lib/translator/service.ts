@@ -228,15 +228,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     const rows = await db
       .selectFrom("activity")
       .innerJoin("novels", "novels.id", "activity.novel_id")
-      .select((_eb) => [
-        "activity.id",
-        "activity.novel_id",
-        "activity.novel_name",
-        "activity.action",
-        "activity.detail",
-        "activity.created_at",
-        "novels.slug",
-      ])
+      .select(ACTIVITY_COLUMNS)
       .orderBy("activity.created_at", "desc")
       .limit(limit)
       .execute();
@@ -247,15 +239,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     const rows = await db
       .selectFrom("activity")
       .innerJoin("novels", "novels.id", "activity.novel_id")
-      .select((_eb) => [
-        "activity.id",
-        "activity.novel_id",
-        "activity.novel_name",
-        "activity.action",
-        "activity.detail",
-        "activity.created_at",
-        "novels.slug",
-      ])
+      .select(ACTIVITY_COLUMNS)
       .where("activity.novel_id", "=", novelId)
       .orderBy("activity.created_at", "asc")
       .execute();
@@ -651,3 +635,14 @@ function toActivityRow(row: {
 }): ActivityRow {
   return { ...row, action: row.action as ActivityAction };
 }
+
+/** Columns both activity readers project, activity + the linked novel's slug. */
+const ACTIVITY_COLUMNS = [
+  "activity.id",
+  "activity.novel_id",
+  "activity.novel_name",
+  "activity.action",
+  "activity.detail",
+  "activity.created_at",
+  "novels.slug",
+] as const;
