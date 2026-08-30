@@ -9,6 +9,7 @@ export function NovelStatusAlert({
   lastError,
   slug,
   isParsing,
+  isExtracting,
 }: {
   status: NovelStatus;
   chapterCount: number;
@@ -16,12 +17,20 @@ export function NovelStatusAlert({
   lastError: string | null;
   slug: string;
   isParsing: boolean;
+  isExtracting: boolean;
 }) {
-  const color = STATUS_BADGE_COLORS[isParsing ? "parsing" : status];
+  const color = STATUS_BADGE_COLORS[isParsing ? "parsing" : isExtracting ? "extracting" : status];
   if (isParsing) {
     return (
       <Alert variant="light" color={color} title="Parsing in progress">
         Chapters will appear here when the job completes.
+      </Alert>
+    );
+  }
+  if (isExtracting) {
+    return (
+      <Alert variant="light" color={color} title="Extraction in progress">
+        The glossary is being built chapter by chapter.
       </Alert>
     );
   }

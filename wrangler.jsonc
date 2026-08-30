@@ -30,15 +30,26 @@
         "binding": "PARSE_QUEUE",
         "queue": "translator-prod-parse-queue",
       },
+      {
+        "binding": "EXTRACTION_QUEUE",
+        "queue": "translator-prod-extraction-queue",
+      },
     ],
     "consumers": [
       {
         "queue": "translator-prod-parse-queue",
         // Must match PARSE_MAX_RETRIES in src/lib/translator/service.ts: the
         // consumer treats a message on that attempt as exhausted and moves the
-        // novel to `failed` instead of retrying again.
+        // novel to `parsing failed` instead of retrying again.
         "max_retries": 3,
         "dead_letter_queue": "translator-parse-dlq",
+      },
+      {
+        "queue": "translator-prod-extraction-queue",
+        // Must match EXTRACTION_MAX_RETRIES in src/lib/translator/service.ts:
+        // on exhaustion the novel moves to `extraction failed`.
+        "max_retries": 3,
+        "dead_letter_queue": "translator-extraction-dlq",
       },
     ],
   },

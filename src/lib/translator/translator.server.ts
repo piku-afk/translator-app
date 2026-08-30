@@ -1,6 +1,11 @@
 import { env } from "cloudflare:workers";
 import { createDb } from "../database/database";
-import type { ParseJobMessage, TranslatorPorts } from "./ports";
+import { gatewayModel } from "./gateway-model";
+import type {
+  ExtractionJobMessage,
+  ParseJobMessage,
+  TranslatorPorts,
+} from "./ports";
 import { createTranslatorService } from "./service";
 
 /**
@@ -24,22 +29,12 @@ const ports: TranslatorPorts = {
       await env.PARSE_QUEUE.send(job);
     },
   },
-  // TODO(#26): replaced by the production wiring - EXTRACTION queue binding and
-  // the AI-gateway model port. Kept as throwing stubs so the seam compiles
-  // while the extraction pass is being built at the service level.
   extractionQueue: {
-    async enqueue() {
-      throw new Error("extraction queue not wired yet");
+    async enqueue(job: ExtractionJobMessage) {
+      await env.EXTRACTION_QUEUE.send(job);
     },
   },
-  model: {
-    async getNewNames() {
-      throw new Error("model port not wired yet");
-    },
-    async getNotesDiff() {
-      throw new Error("model port not wired yet");
-    },
-  },
+  model: gatewayModel,
 };
 
 export const translatorService = createTranslatorService(ports);

@@ -1,5 +1,5 @@
 import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
-import type { ParseJobMessage } from "./lib/translator/ports";
+import type { ExtractionJobMessage, ParseJobMessage } from "./lib/translator/ports";
 import { translatorService } from "./lib/translator/translator.server";
 
 /**
@@ -9,6 +9,9 @@ import { translatorService } from "./lib/translator/translator.server";
  * include it, so narrow it here.
  */
 type CfRequest = Request & { cf?: { timezone?: string } };
+
+/** The extraction queue name this worker consumes, matching wrangler.jsonc. */
+const EXTRACTION_QUEUE_NAME = "translator-prod-extraction-queue";
 
 const server = createServerEntry({
   fetch(incomingRequest) {
@@ -31,14 +34,33 @@ export default {
   fetch: server.fetch,
 
   /**
-   * Parse-queue consumer. The service returns a settlement per
-   * message: it has either finished the work ("ack" - including a finalized
-   * novel on retry exhaustion, see runParseJob) or asked for another attempt
-   * ("retry").
+   * Queue consumer. Routes each batch by its queue name: parse messages go to
+   * the parse pass, extraction messages to the extraction pass. The service
+   * returns a settlement per message: it has either finished the work ("ack" -
+   * including a finalized novel on retry exhaustion) or asked for another
+   * attempt ("retry").
    */
-  async queue(batch: MessageBatch<ParseJobMessage>): Promise<void> {
+  async queue(batch: MessageBatch<ParseJobMessage | ExtractionJobMessage>): Promise<void> {
+    if (batch.queue === EXTRACTION_QUEUE_NAME) {
+      for (const message of batch.messages) {
+        const settlement = await translatorService.runExtractionJob(
+          message.body as ExtractionJobMessage,
+          message.attempts,
+        );
+        if (settlement.outcome === "retry") {
+          message.retry();
+        } else {
+          message.ack();
+        }
+      }
+      return;
+    }
+
     for (const message of batch.messages) {
-      const settlement = await translatorService.runParseJob(message.body, message.attempts);
+      const settlement = await translatorService.runParseJob(
+        message.body as ParseJobMessage,
+        message.attempts,
+      );
       if (settlement.outcome === "retry") {
         message.retry();
       } else {
