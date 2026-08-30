@@ -1,12 +1,6 @@
 import { Output, generateText } from "ai";
 import { z } from "zod";
-import type {
-  ModelNamePair,
-  ModelNotesDiff,
-  ModelNotesEntry,
-  ModelPort,
-} from "./ports";
-import type { GlossaryCategory } from "./glossary";
+import type { ModelNamePair, ModelNotesDiff, ModelPort } from "./ports";
 import namesInstructions from "./instructions/NAMES INSTRUCTIONS.md?raw";
 import notesInstructions from "./instructions/NOTES INSTRUCTIONS.md?raw";
 
@@ -108,6 +102,3 @@ export const gatewayModel: ModelPort = {
     return output;
   },
 };
-
-// Re-exported for tests that want to type against the model-facing shapes.
-export type { ModelNamePair, ModelNotesDiff, ModelNotesEntry, GlossaryCategory };
