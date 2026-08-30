@@ -66,7 +66,8 @@ export const Route = createFileRoute("/_app/novels/$slug")({
 
     const { novel, chapter_count } = detail;
     const status = novel.status as NovelStatus;
-    const canStartParsing = status === "draft" || status === "failed" || status === "needs review";
+    const canStartParsing =
+      status === "draft" || status === "parsing failed" || status === "needs review";
     const isParsing = status === "parsing" || startParsingMutation.isPending;
 
     // novel-card's language for the last action, with the same updated_at proxy.

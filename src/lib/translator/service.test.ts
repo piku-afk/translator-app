@@ -3,6 +3,7 @@ import { Kysely, SqliteDialect } from "kysely";
 import { describe, expect, it } from "vitest";
 import { up as createNovelsTable } from "../../../migrations/001_create_novels.ts";
 import { up as rebuildNovelsCreateChapters } from "../../../migrations/003_add_failed_status_and_chapters.ts";
+import { up as createGlossaryAndStageStatuses } from "../../../migrations/004_create_glossary_and_stage_statuses.ts";
 import type { Database } from "../database/database";
 import {
   DUPLICATE_NOVEL_ERROR,
@@ -23,7 +24,11 @@ async function createTestDb(): Promise<Kysely<Database>> {
   const db = new Kysely<Database>({
     dialect: new SqliteDialect({ database: new SqliteDatabase(":memory:") }),
   });
-  for (const up of [createNovelsTable, rebuildNovelsCreateChapters]) {
+  for (const up of [
+    createNovelsTable,
+    rebuildNovelsCreateChapters,
+    createGlossaryAndStageStatuses,
+  ]) {
     await up(db);
   }
   return db;
@@ -224,9 +229,9 @@ describe("startParsing", () => {
     expect(parseQueue.jobs).toEqual([{ novelId: novel.id }]);
   });
 
-  it("allows re-triggering parsing from failed", async () => {
+  it("allows re-triggering parsing from parsing failed", async () => {
     const { db, parseQueue, service } = await makeService();
-    const novel = await seedNovel(db, { status: "failed", last_error: "boom" });
+    const novel = await seedNovel(db, { status: "parsing failed", last_error: "boom" });
 
     const updated = await service.startParsing(novel.slug);
 
@@ -244,12 +249,12 @@ describe("startParsing", () => {
     expect(parseQueue.jobs).toEqual([{ novelId: novel.id }]);
   });
 
-  it("rejects a novel that is not draft, failed, or needs review", async () => {
+  it("rejects a novel that is not draft, parsing failed, or needs review", async () => {
     const { db, service } = await makeService();
     const novel = await seedNovel(db, { status: "ready" });
 
     await expect(service.startParsing(novel.slug)).rejects.toThrow(
-      'Only draft, failed, or needs review novels can start parsing (currently "ready")',
+      'Only draft, parsing failed, or needs review novels can start parsing (currently "ready")',
     );
   });
 
@@ -261,13 +266,13 @@ describe("startParsing", () => {
 
   it("reverts to the original status when the enqueue fails", async () => {
     const { db, parseQueue, service } = await makeService();
-    const novel = await seedNovel(db, { status: "failed", last_error: "boom" });
+    const novel = await seedNovel(db, { status: "parsing failed", last_error: "boom" });
     parseQueue.setFailing(true);
 
     await expect(service.startParsing(novel.slug)).rejects.toThrow("queue unavailable");
 
     const reverted = await refetchNovel(db, novel.id);
-    expect(reverted.status).toBe("failed");
+    expect(reverted.status).toBe("parsing failed");
     expect(parseQueue.jobs).toEqual([]);
   });
 });
@@ -357,7 +362,7 @@ describe("runParseJob", () => {
     expect(storage.objects.size).toBe(0);
   });
 
-  it("marks the novel failed with last_error once retries are exhausted", async () => {
+  it("marks the novel parsing failed with last_error once retries are exhausted", async () => {
     const { db, service } = await makeService();
     const novel = await seedNovel(db, { status: "parsing", total_chapters: 2 });
 
@@ -365,7 +370,7 @@ describe("runParseJob", () => {
 
     expect(settlement).toEqual({ outcome: "ack" });
     const updated = await refetchNovel(db, novel.id);
-    expect(updated.status).toBe("failed");
+    expect(updated.status).toBe("parsing failed");
     expect(updated.last_error).toContain("Raw file missing");
   });
 

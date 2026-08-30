@@ -26,8 +26,10 @@ const NOVEL_STATUSES = [
   "parsing",
   "ready",
   "needs review",
-  "failed",
+  "parsing failed",
   "extracting",
+  "names extracted",
+  "extraction failed",
   "translating",
   "completed",
 ] as const;

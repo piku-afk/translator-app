@@ -154,9 +154,9 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       throw new Error(NOVEL_NOT_FOUND_ERROR);
     }
 
-    if (novel.status !== "draft" && novel.status !== "failed" && novel.status !== "needs review") {
+    if (novel.status !== "draft" && novel.status !== "parsing failed" && novel.status !== "needs review") {
       throw new Error(
-        `Only draft, failed, or needs review novels can start parsing (currently "${novel.status}")`,
+        `Only draft, parsing failed, or needs review novels can start parsing (currently "${novel.status}")`,
       );
     }
 
@@ -228,7 +228,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     } catch (error) {
       if (attempt >= PARSE_MAX_RETRIES) {
         try {
-          await setNovelStatus(novel.id, "failed", getErrorMessage(error));
+          await setNovelStatus(novel.id, "parsing failed", getErrorMessage(error));
           return { outcome: "ack" };
         } catch {
           // Even recording the failure failed; let the queue retry the message.
