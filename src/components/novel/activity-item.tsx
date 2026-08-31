@@ -1,25 +1,10 @@
-import { Group, Stack, Text } from "@mantine/core";
+import { Group, Stack, Text, ThemeIcon } from "@mantine/core";
 import { Link } from "@tanstack/react-router";
-import { format, formatDistanceToNow, startOfDay, subDays } from "date-fns";
 import { ACTIVITY_COLORS, ACTIVITY_LABELS } from "#/lib/novels/activity-metadata";
 import type { ActivityRow } from "#/lib/translator/service";
 import { ActivityIcon } from "./activity-icon";
+import { formatRelativeDateTime } from "#/lib/utils";
 
-/**
- * Relative time for recent events (today or yesterday), otherwise a bare
- * month + year (e.g. "Aug 2026"). Older-than-yesterday events don't need a
- * precise clock time, so an exact date is dropped for scannability.
- */
-export function formatActivityTime(iso: string): string {
-  const date = new Date(iso);
-  const cutoff = startOfDay(subDays(new Date(), 1)); // start of yesterday
-  return date >= cutoff
-    ? formatDistanceToNow(date, { addSuffix: true })
-    : format(date, "MMM yyyy");
-}
-
-/** One activity entry in the home feed card. Reads icon → action → novel, with a
- * relative timestamp right-aligned and an optional detail line underneath. */
 export function ActivityItem({ activity }: { activity: ActivityRow }) {
   const color = ACTIVITY_COLORS[activity.action];
 
@@ -27,31 +12,22 @@ export function ActivityItem({ activity }: { activity: ActivityRow }) {
     <Link
       to="/novels/$slug"
       params={{ slug: activity.slug }}
-      className="block px-4 py-3 hover:bg-muted/50 focus:outline-ring focus-visible:outline-2 focus-visible:outline-ring"
+      className="block p-4 hover:bg-gray-100"
     >
-      <Group wrap="nowrap" className="gap-3">
-        <Text c={color} component="span" className="shrink-0 leading-none">
+      <Group className="gap-2">
+        <ThemeIcon variant="white" size="sm" color={color} className="bg-transparent">
           <ActivityIcon action={activity.action} className="size-4" />
+        </ThemeIcon>
+        <Text className="text-base font-medium">{ACTIVITY_LABELS[activity.action]}</Text>
+        <Text c="dimmed" className="ml-auto text-xs tabular-nums">
+          {formatRelativeDateTime(activity.created_at)}
         </Text>
-
-        <Stack className="min-w-0 flex-1 gap-0.5">
-          <Group wrap="nowrap" className="gap-2">
-            <Text className="min-w-0 truncate text-sm font-medium">
-              {ACTIVITY_LABELS[activity.action]}
-            </Text>
-            <Text className="shrink-0 overflow-hidden text-ellipsis text-sm text-muted-foreground">
-              {activity.novel_name}
-            </Text>
-            <Text className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
-              {formatActivityTime(activity.created_at)}
-            </Text>
-          </Group>
-
-          {activity.detail && (
-            <Text className="text-xs text-muted-foreground">{activity.detail}</Text>
-          )}
-        </Stack>
       </Group>
+
+      <Stack className="gap-1 mt-2">
+        <Text className="text-sm">{activity.novel_name}</Text>
+        {activity.detail && <Text className="text-xs">{activity.detail}</Text>}
+      </Stack>
     </Link>
   );
 }

@@ -1,20 +1,32 @@
-import { Check, CircleDot, Plus, RotateCw, X, type LucideIcon } from "lucide-react";
+import {
+  BookCheck,
+  CircleDot,
+  FileCheck,
+  FileSearchIcon,
+  FileScan,
+  FileXIcon,
+  type LucideIcon,
+} from "lucide-react";
 import type { ActivityAction } from "#/lib/novels/novels-core";
 
-/** Icon per activity action, matching the screens.md map:
- * `+` created, `↻` started, `✓` ready/extracted, `◎` needs review, `✕` failed. */
 const ACTIVITY_ICONS: Record<ActivityAction, LucideIcon> = {
-  "novel created": Plus,
-  "parsing started": RotateCw,
-  "parsing ready": Check,
+  "novel created": BookCheck,
+  "parsing started": FileSearchIcon,
+  "parsing ready": FileCheck,
   "needs review": CircleDot,
-  "parsing failed": X,
-  "extraction started": RotateCw,
-  "names extracted": Check,
-  "extraction failed": X,
+  "parsing failed": FileXIcon,
+  "extraction started": FileScan,
+  "names extracted": FileCheck,
+  "extraction failed": FileXIcon,
 };
 
-export function ActivityIcon({ action, className }: { action: ActivityAction; className?: string }) {
+export function ActivityIcon({
+  action,
+  className,
+}: {
+  action: ActivityAction;
+  className?: string;
+}) {
   const Icon = ACTIVITY_ICONS[action];
   return <Icon className={className} aria-hidden />;
 }

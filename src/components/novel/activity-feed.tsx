@@ -15,8 +15,6 @@ export function ActivityFeedSkeleton() {
   );
 }
 
-/** Home page's Recent Activity feed: the most recent lifecycle events across all
- * novels, newest first, capped at 5, each clickable to its novel. */
 export function ActivityFeed() {
   const { data: activities } = useSuspenseQuery(getRecentActivitiesQueryOptions());
 
@@ -32,7 +30,7 @@ export function ActivityFeed() {
   }
 
   return (
-    <Card withBorder radius="md" className="bg-card px-0 py-0">
+    <Card withBorder radius="md" className="px-0 py-0">
       <Stack gap={0}>
         {activities.map((activity, index) => (
           <Fragment key={activity.id}>

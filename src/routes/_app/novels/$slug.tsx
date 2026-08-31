@@ -234,16 +234,14 @@ export const Route = createFileRoute("/_app/novels/$slug")({
             slug={slug}
             isExtracting={isExtracting}
             canStartExtraction={canStartExtraction}
-            startExtractionLabel={
-              status === "ready" ? "Start extraction" : "Re-run extraction"
-            }
+            startExtractionLabel={status === "ready" ? "Start extraction" : "Re-run extraction"}
             onStartExtraction={() => startExtractionMutation.mutate()}
           />
         </Stack>
 
         <Divider />
 
-        <Stack className="gap-3">
+        <Stack className="gap-6">
           <SectionHeading>History</SectionHeading>
           <NovelHistory slug={slug} isActive={isParsing || isExtracting} />
         </Stack>

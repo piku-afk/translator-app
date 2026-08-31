@@ -1,12 +1,10 @@
-import { EmptyState, Text, Timeline } from "@mantine/core";
+import { EmptyState, Stack, Text, ThemeIcon, Timeline } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
-import { format } from "date-fns";
 import { ACTIVITY_COLORS, ACTIVITY_LABELS } from "#/lib/novels/activity-metadata";
 import { getNovelActivityQueryOptions } from "#/lib/novels/novels";
-
-/** Recent entries shown before older ones are collapsed, matching the mockup. */
-const TIMELINE_LIMIT = 5;
+import { ActivityIcon } from "./activity-icon";
+import { formatDateTime } from "#/lib/utils";
 
 type NovelHistoryProps = {
   slug: string;
@@ -14,9 +12,9 @@ type NovelHistoryProps = {
   isActive: boolean;
 };
 
-/** A novel's activity timeline per the screens.md mockup: newest first, the
- * latest few shown, older entries collapsed into a hint. Live-refreshes on the
- * same 3s cadence as the detail page while a job runs. */
+/** A novel's complete activity timeline, newest first, with the same
+ * per-action icons as the home feed. Live-refreshes on
+ * the same 3s cadence as the detail page while a job runs. */
 export function NovelHistory({ slug, isActive }: NovelHistoryProps) {
   const { data } = useQuery({
     ...getNovelActivityQueryOptions(slug),
@@ -37,33 +35,34 @@ export function NovelHistory({ slug, isActive }: NovelHistoryProps) {
   }
 
   // The mockup reads top-to-bottom, newest first.
-  const visible = [...activities].reverse().slice(0, TIMELINE_LIMIT);
-  const olderCount = activities.length - visible.length;
+  const visible = [...activities].reverse();
 
   return (
-    <Timeline bulletSize={20} lineWidth={2}>
+    <Timeline bulletSize={32} lineWidth={2} classNames={{ itemBullet: "bg-white overflow-hidden" }}>
       {visible.map((activity) => (
         <Timeline.Item
           key={activity.id}
           color={ACTIVITY_COLORS[activity.action]}
           title={ACTIVITY_LABELS[activity.action]}
+          bullet={
+            <ThemeIcon
+              variant="white"
+              className="rounded-sm"
+              color={ACTIVITY_COLORS[activity.action]}
+            >
+              <ActivityIcon action={activity.action} className="size-4" />
+            </ThemeIcon>
+          }
+          classNames={{ itemTitle: "font-medium" }}
         >
-          {activity.detail && (
-            <Text className="text-xs text-muted-foreground">{activity.detail}</Text>
-          )}
-          <Text className="text-xs tabular-nums text-muted-foreground">
-            {format(activity.created_at, "d MMM HH:mm")}
-          </Text>
+          <Stack className="gap-1">
+            {activity.detail && <Text className="text-sm">{activity.detail}</Text>}
+            <Text c="dimmed" className="text-xs tabular-nums">
+              {formatDateTime(activity.created_at)}
+            </Text>
+          </Stack>
         </Timeline.Item>
       ))}
-
-      {olderCount > 0 && (
-        <Timeline.Item>
-          <Text c="dimmed" className="text-xs italic">
-            older entries not shown
-          </Text>
-        </Timeline.Item>
-      )}
     </Timeline>
   );
 }

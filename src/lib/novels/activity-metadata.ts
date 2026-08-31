@@ -1,6 +1,5 @@
 import type { ActivityAction } from "./novels-core";
 
-/** Title-case label per activity action, shown in the feed and timeline. */
 export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
   "novel created": "Novel created",
   "parsing started": "Parsing started",
@@ -12,10 +11,8 @@ export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
   "extraction failed": "Extraction failed",
 };
 
-/** Semantic color per action (muted / accent / success / warning / danger),
- * as Mantine color names so badges, bullets, and icons can share them. */
 export const ACTIVITY_COLORS: Record<ActivityAction, string> = {
-  "novel created": "gray",
+  "novel created": "black",
   "parsing started": "blue",
   "parsing ready": "green",
   "needs review": "yellow",
