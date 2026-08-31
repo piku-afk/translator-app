@@ -81,8 +81,7 @@ export const DUPLICATE_NOVEL_ERROR = "A novel with this name already exists";
 /**
  * The committed novel-level lifecycle actions recorded as Activity rows. Only
  * these eight are recorded; translation-stage actions are reserved for when
- * translation is wired up. The DB stores the structured value; prose is derived
- * at render time by `activityText` so wording can change without a migration.
+ * translation is wired up.
  */
 const ACTIVITY_ACTIONS = [
   "novel created",
@@ -95,36 +94,3 @@ const ACTIVITY_ACTIONS = [
   "extraction failed",
 ] as const;
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];
-
-/**
- * Render an Activity as a human-readable sentence. `ago` is a caller-supplied
- * relative-timestamp string (e.g. `formatDistanceToNow`'s "2 minutes ago");
- * `detail` carries structured prose such as the `needs review` mismatch figures
- * ("4 ≠ 5").
- */
-export function activityText(
-  action: ActivityAction,
-  name: string,
-  ago: string,
-  detail?: string | null,
-): string {
-  const quoted = `"${name}"`;
-  switch (action) {
-    case "novel created":
-      return `Created ${quoted} ${ago}`;
-    case "parsing started":
-      return `${quoted} parsing started ${ago}`;
-    case "parsing ready":
-      return `${quoted} is ready for extraction ${ago}`;
-    case "needs review":
-      return `${quoted} needs review — chapter count mismatch (${detail ?? ""}) ${ago}`.trim();
-    case "parsing failed":
-      return `${quoted} parsing failed ${ago}`;
-    case "extraction started":
-      return `${quoted} name extraction started ${ago}`;
-    case "names extracted":
-      return `${quoted} names extracted ${ago}`;
-    case "extraction failed":
-      return `${quoted} extraction failed ${ago}`;
-  }
-}

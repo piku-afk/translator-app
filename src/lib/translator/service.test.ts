@@ -438,7 +438,8 @@ describe("runParseJob", () => {
 
     const rows = await db.selectFrom("activity").selectAll().orderBy("id").execute();
     expect(rows.map((r) => r.action)).toEqual(["parsing ready", "needs review"]);
-    expect(rows[1].detail).toBe("2 ≠ 3");
+    expect(rows[0].detail).toBe("1 chapters extracted");
+    expect(rows[1].detail).toBe("2 extracted, 3 declared");
     expect(rows[1].novel_name).toBe(mismatching.name);
   });
 
@@ -506,6 +507,7 @@ describe("runParseJob", () => {
     const rows = await db.selectFrom("activity").selectAll().execute();
     expect(rows.map((r) => r.action)).toEqual(["parsing failed"]);
     expect(rows[0].novel_name).toBe(novel.name);
+    expect(rows[0].detail).toContain("Raw file missing");
   });
 
   it("records no activity for a stale or unknown-novel ack", async () => {
@@ -744,6 +746,7 @@ describe("runExtractionJob", () => {
     ).toBe("ack");
     rows = await db.selectFrom("activity").selectAll().execute();
     expect(rows.map((r) => r.action)).toEqual(["extraction failed"]);
+    expect(rows[0].detail).toContain("model unavailable");
   });
 
   it("acks stale messages for novels no longer extracting", async () => {

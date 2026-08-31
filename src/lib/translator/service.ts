@@ -332,14 +332,16 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
         novel.id,
         novel.name,
         mismatch ? "needs review" : "parsing ready",
-        mismatch ? `${chapters.length} ≠ ${novel.total_chapters}` : null,
+        mismatch
+          ? `${chapters.length} extracted, ${novel.total_chapters} declared`
+          : `${chapters.length} chapters extracted`,
       );
       return { outcome: "ack" };
     } catch (error) {
       if (attempt >= PARSE_MAX_RETRIES) {
         try {
           await setNovelStatus(novel.id, "parsing failed", getErrorMessage(error));
-          await recordActivity(novel.id, novel.name, "parsing failed");
+          await recordActivity(novel.id, novel.name, "parsing failed", getErrorMessage(error));
           return { outcome: "ack" };
         } catch {
           // Even recording the failure failed; let the queue retry the message.
@@ -526,7 +528,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       if (attempt >= EXTRACTION_MAX_RETRIES) {
         try {
           await setNovelStatus(novel.id, "extraction failed", getErrorMessage(error));
-          await recordActivity(novel.id, novel.name, "extraction failed");
+          await recordActivity(novel.id, novel.name, "extraction failed", getErrorMessage(error));
           return { outcome: "ack" };
         } catch {
           // Even recording the failure failed; let the queue retry the message.

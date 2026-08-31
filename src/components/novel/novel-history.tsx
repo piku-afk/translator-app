@@ -1,21 +1,12 @@
-import { EmptyState, Timeline } from "@mantine/core";
+import { EmptyState, Text, Timeline } from "@mantine/core";
 import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { activityText, type ActivityAction } from "#/lib/novels/novels-core";
+import { format } from "date-fns";
+import { ACTIVITY_COLORS, ACTIVITY_LABELS } from "#/lib/novels/activity-metadata";
 import { getNovelActivityQueryOptions } from "#/lib/novels/novels";
 
-/** Color per activity action, giving the timeline a light semantic hierarchy. */
-const ACTIVITY_COLORS: Record<ActivityAction, string> = {
-  "novel created": "gray",
-  "parsing started": "blue",
-  "parsing ready": "green",
-  "needs review": "yellow",
-  "parsing failed": "red",
-  "extraction started": "blue",
-  "names extracted": "green",
-  "extraction failed": "red",
-};
+/** Recent entries shown before older ones are collapsed, matching the mockup. */
+const TIMELINE_LIMIT = 5;
 
 type NovelHistoryProps = {
   slug: string;
@@ -23,15 +14,16 @@ type NovelHistoryProps = {
   isActive: boolean;
 };
 
-/** A novel's complete lifecycle history, chronological (oldest first), no limit.
- * Live-refreshes on the same 3s cadence as the detail page while a job runs. */
+/** A novel's activity timeline per the screens.md mockup: newest first, the
+ * latest few shown, older entries collapsed into a hint. Live-refreshes on the
+ * same 3s cadence as the detail page while a job runs. */
 export function NovelHistory({ slug, isActive }: NovelHistoryProps) {
   const { data } = useQuery({
     ...getNovelActivityQueryOptions(slug),
     refetchInterval: isActive ? 3000 : false,
   });
 
-  const activities = data ?? [];
+  const activities = data ?? []; // server returns chronological asc
 
   if (activities.length === 0) {
     return (
@@ -44,18 +36,34 @@ export function NovelHistory({ slug, isActive }: NovelHistoryProps) {
     );
   }
 
+  // The mockup reads top-to-bottom, newest first.
+  const visible = [...activities].reverse().slice(0, TIMELINE_LIMIT);
+  const olderCount = activities.length - visible.length;
+
   return (
     <Timeline bulletSize={20} lineWidth={2}>
-      {activities.map((activity) => {
-        const ago = formatDistanceToNow(activity.created_at, { addSuffix: true });
-        return (
-          <Timeline.Item
-            key={activity.id}
-            color={ACTIVITY_COLORS[activity.action]}
-            title={activityText(activity.action, activity.novel_name, ago, activity.detail)}
-          />
-        );
-      })}
+      {visible.map((activity) => (
+        <Timeline.Item
+          key={activity.id}
+          color={ACTIVITY_COLORS[activity.action]}
+          title={ACTIVITY_LABELS[activity.action]}
+        >
+          {activity.detail && (
+            <Text className="text-xs text-muted-foreground">{activity.detail}</Text>
+          )}
+          <Text className="text-xs tabular-nums text-muted-foreground">
+            {format(activity.created_at, "d MMM HH:mm")}
+          </Text>
+        </Timeline.Item>
+      ))}
+
+      {olderCount > 0 && (
+        <Timeline.Item>
+          <Text c="dimmed" className="text-xs italic">
+            older entries not shown
+          </Text>
+        </Timeline.Item>
+      )}
     </Timeline>
   );
 }
