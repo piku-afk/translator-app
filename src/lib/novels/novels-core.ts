@@ -77,3 +77,20 @@ export function chapterFileKey(slug: string, number: number): string {
 }
 
 export const DUPLICATE_NOVEL_ERROR = "A novel with this name already exists";
+
+/**
+ * The committed novel-level lifecycle actions recorded as Activity rows. Only
+ * these eight are recorded; translation-stage actions are reserved for when
+ * translation is wired up.
+ */
+const ACTIVITY_ACTIONS = [
+  "novel created",
+  "parsing started",
+  "parsing ready",
+  "needs review",
+  "parsing failed",
+  "extraction started",
+  "names extracted",
+  "extraction failed",
+] as const;
+export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];

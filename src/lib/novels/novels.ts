@@ -2,7 +2,12 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireAuth } from "#/lib/auth/session.server";
 import type { Glossary } from "../translator/glossary";
-import { NOVEL_NOT_FOUND_ERROR, type NovelDetail, type NovelSummary } from "../translator/service";
+import {
+  NOVEL_NOT_FOUND_ERROR,
+  type ActivityRow,
+  type NovelDetail,
+  type NovelSummary,
+} from "../translator/service";
 import { translatorService } from "../translator/translator.server";
 import { CreateNovelSchema, type Novel } from "./novels-core";
 
@@ -10,6 +15,8 @@ export const novelsQueryKey = ["novels"] as const;
 export const recentNovelsQueryKey = ["novels", "recent"] as const;
 export const novelDetailQueryKey = (slug: string) => ["novels", slug] as const;
 export const glossaryQueryKey = (slug: string) => ["novels", slug, "glossary"] as const; // nested under the detail key so it invalidates with the novel
+export const recentActivitiesQueryKey = ["activities", "recent"] as const;
+export const novelActivityQueryKey = (slug: string) => ["novels", slug, "activity"] as const;
 
 const SlugSchema = z.object({ slug: z.string().min(1) });
 
@@ -19,6 +26,15 @@ const listNovels = createServerFn().handler(async (): Promise<NovelSummary[]> =>
 
 const listRecentNovels = createServerFn().handler(async (): Promise<NovelSummary[]> => {
   return translatorService.listRecentNovels();
+});
+
+// limit 5: the home page's Recent Activity feed stays scannable; the DB reader
+// caps it at read time. No per-function requireAuth - the _app layout guards the
+// page, mirroring listRecentNovels.
+const HOME_ACTIVITY_LIMIT = 5;
+
+const listRecentActivities = createServerFn().handler(async (): Promise<ActivityRow[]> => {
+  return translatorService.listRecentActivities(HOME_ACTIVITY_LIMIT);
 });
 
 export const createNovel = createServerFn({ method: "POST" })
@@ -73,4 +89,23 @@ const getGlossary = createServerFn()
 
 export function getGlossaryQueryOptions(slug: string) {
   return { queryFn: () => getGlossary({ data: { slug } }), queryKey: glossaryQueryKey(slug) };
+}
+
+export function getRecentActivitiesQueryOptions() {
+  return { queryFn: () => listRecentActivities(), queryKey: recentActivitiesQueryKey };
+}
+
+const listActivityForNovel = createServerFn()
+  .validator(SlugSchema)
+  .handler(async ({ data }): Promise<ActivityRow[]> => {
+    await requireAuth();
+    const novel = await translatorService.findNovelBySlug(data.slug);
+    if (!novel) {
+      throw new Error(NOVEL_NOT_FOUND_ERROR);
+    }
+    return translatorService.listActivitiesForNovel(novel.id);
+  });
+
+export function getNovelActivityQueryOptions(slug: string) {
+  return { queryFn: () => listActivityForNovel({ data: { slug } }), queryKey: novelActivityQueryKey(slug) };
 }

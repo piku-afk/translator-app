@@ -3,6 +3,7 @@ import {
   chapterFileKey,
   rawFileKey,
   toSlug,
+  type ActivityAction,
   type CreateNovelInput,
   type Novel,
   type NovelStatus,
@@ -56,6 +57,18 @@ export interface NovelDetail {
 /** A novel plus the number of parsed chapter rows, for list views. */
 export type NovelSummary = Novel & { parsed_chapters: number };
 
+/** A recorded Activity row as the readers return it. `slug` is fetched by
+ * joining novels so the UI can link to the novel's detail page. */
+export interface ActivityRow {
+  id: number;
+  novel_id: number;
+  novel_name: string;
+  slug: string;
+  action: ActivityAction;
+  detail: string | null;
+  created_at: string;
+}
+
 /**
  * The translator service seam: every Novel/Chapter domain operation, written
  * against injected ports so it runs unchanged on Cloudflare bindings or on
@@ -77,6 +90,10 @@ export interface TranslatorService {
   runExtractionJob(job: ExtractionJobMessage, attempt: number): Promise<ExtractionSettlement>;
   /** The novel's current glossary; empty for a novel that has not been extracted. */
   listGlossary(slug: string): Promise<Glossary>;
+  /** Most recent activity rows across all novels, newest first, capped at `limit`. */
+  listRecentActivities(limit: number): Promise<ActivityRow[]>;
+  /** A single novel's complete activity history, chronological (oldest first). */
+  listActivitiesForNovel(novelId: number): Promise<ActivityRow[]>;
 }
 
 export function createTranslatorService(ports: TranslatorPorts): TranslatorService {
@@ -147,13 +164,18 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       throw error;
     }
 
-    return (await db
+    const created = (await db
       .selectFrom("novels")
       .selectAll()
       .where("slug", "=", slug)
       .orderBy("id", "desc")
       .limit(1)
       .executeTakeFirstOrThrow()) satisfies Novel;
+
+    // Record the committed transition only now, after the insert succeeded.
+    await recordActivity(created.id, created.name, "novel created");
+
+    return created;
   }
 
   async function findNovelById(novelId: number): Promise<Novel | undefined> {
@@ -175,6 +197,53 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       })
       .where("id", "=", novelId)
       .execute();
+  }
+
+  /**
+   * Append an Activity row for a committed novel-level lifecycle transition.
+   * Callers invoke this only *after* the transition has truly committed (insert
+   * succeeded / queue enqueue succeeded / job finalizer ran); a rolled-back
+   * enqueue or pipeline-internal churn must never call it. No dedup: re-triggers
+   * are distinct moments and each gets its own row.
+   */
+  async function recordActivity(
+    novelId: number,
+    novelName: string,
+    action: ActivityAction,
+    detail?: string | null,
+  ): Promise<void> {
+    await db
+      .insertInto("activity")
+      .values({
+        novel_id: novelId,
+        novel_name: novelName,
+        action,
+        detail: detail ?? null,
+        created_at: new Date().toISOString(),
+      })
+      .execute();
+  }
+
+  async function listRecentActivities(limit: number): Promise<ActivityRow[]> {
+    const rows = await db
+      .selectFrom("activity")
+      .innerJoin("novels", "novels.id", "activity.novel_id")
+      .select(ACTIVITY_COLUMNS)
+      .orderBy("activity.created_at", "desc")
+      .limit(limit)
+      .execute();
+    return rows.map(toActivityRow);
+  }
+
+  async function listActivitiesForNovel(novelId: number): Promise<ActivityRow[]> {
+    const rows = await db
+      .selectFrom("activity")
+      .innerJoin("novels", "novels.id", "activity.novel_id")
+      .select(ACTIVITY_COLUMNS)
+      .where("activity.novel_id", "=", novelId)
+      .orderBy("activity.created_at", "asc")
+      .execute();
+    return rows.map(toActivityRow);
   }
 
   async function startParsing(slug: string): Promise<Novel> {
@@ -201,6 +270,11 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       await setNovelStatus(novel.id, novel.status);
       throw error;
     }
+
+    // The enqueue committed; only now record the transition. A rolled-back
+    // enqueue above never reaches this line, so no stray "parsing started"
+    // row is ever written.
+    await recordActivity(novel.id, novel.name, "parsing started");
 
     // Refetch: the caller expects the novel as it is now (status "parsing"),
     // not the row as it was read before the update.
@@ -254,11 +328,20 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
 
       const mismatch = chapters.length !== novel.total_chapters;
       await setNovelStatus(novel.id, mismatch ? "needs review" : "ready", null);
+      await recordActivity(
+        novel.id,
+        novel.name,
+        mismatch ? "needs review" : "parsing ready",
+        mismatch
+          ? `${chapters.length} extracted, ${novel.total_chapters} declared`
+          : `${chapters.length} chapters extracted`,
+      );
       return { outcome: "ack" };
     } catch (error) {
       if (attempt >= PARSE_MAX_RETRIES) {
         try {
           await setNovelStatus(novel.id, "parsing failed", getErrorMessage(error));
+          await recordActivity(novel.id, novel.name, "parsing failed", getErrorMessage(error));
           return { outcome: "ack" };
         } catch {
           // Even recording the failure failed; let the queue retry the message.
@@ -297,6 +380,9 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       await setNovelStatus(novel.id, novel.status);
       throw error;
     }
+
+    // The enqueue committed; only now record the transition.
+    await recordActivity(novel.id, novel.name, "extraction started");
 
     return (await findNovelById(novel.id))!;
   }
@@ -436,11 +522,13 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
 
       // The walk completed: the glossary is complete.
       await setNovelStatus(novel.id, "names extracted", null);
+      await recordActivity(novel.id, novel.name, "names extracted");
       return { outcome: "ack" };
     } catch (error) {
       if (attempt >= EXTRACTION_MAX_RETRIES) {
         try {
           await setNovelStatus(novel.id, "extraction failed", getErrorMessage(error));
+          await recordActivity(novel.id, novel.name, "extraction failed", getErrorMessage(error));
           return { outcome: "ack" };
         } catch {
           // Even recording the failure failed; let the queue retry the message.
@@ -483,6 +571,8 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     findNovelBySlug,
     listRecentNovels,
     listGlossary,
+    listRecentActivities,
+    listActivitiesForNovel,
   };
 }
 
@@ -534,3 +624,27 @@ function sameEntry(a: GlossaryEntry, b: GlossaryEntry): boolean {
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Error && /unique constraint/i.test(error.message);
 }
+
+/** Cast the DB's `string` action to the narrower ActivityAction union. */
+function toActivityRow(row: {
+  id: number;
+  novel_id: number;
+  novel_name: string;
+  slug: string;
+  action: string;
+  detail: string | null;
+  created_at: string;
+}): ActivityRow {
+  return { ...row, action: row.action as ActivityAction };
+}
+
+/** Columns both activity readers project, activity + the linked novel's slug. */
+const ACTIVITY_COLUMNS = [
+  "activity.id",
+  "activity.novel_id",
+  "activity.novel_name",
+  "activity.action",
+  "activity.detail",
+  "activity.created_at",
+  "novels.slug",
+] as const;

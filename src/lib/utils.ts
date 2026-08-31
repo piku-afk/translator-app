@@ -1,4 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
+import { format, formatDistanceToNow, startOfDay, subDays } from "date-fns";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]): string {
@@ -8,6 +9,16 @@ export function cn(...inputs: ClassValue[]): string {
 type ErrorWithMessage = {
   message: string;
 };
+
+export function formatDateTime(iso: string) {
+  return format(iso, "do MMM yyyy");
+}
+
+export function formatRelativeDateTime(iso: string): string {
+  const date = new Date(iso);
+  const cutoff = startOfDay(subDays(new Date(), 1)); // start of yesterday
+  return date >= cutoff ? formatDistanceToNow(date, { addSuffix: true }) : formatDateTime(iso);
+}
 
 function isErrorWithMessage(error: unknown): error is ErrorWithMessage {
   return (
