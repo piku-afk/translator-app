@@ -1,4 +1,5 @@
-import { EmptyState, Skeleton, Stack } from "@mantine/core";
+import { Card, Divider, EmptyState, Skeleton, Stack } from "@mantine/core";
+import { Fragment } from "react";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
 import { getRecentActivitiesQueryOptions } from "#/lib/novels/novels";
@@ -31,10 +32,15 @@ export function ActivityFeed() {
   }
 
   return (
-    <Stack component="ol" className="list-none gap-3">
-      {activities.map((activity) => (
-        <ActivityItem key={activity.id} activity={activity} />
-      ))}
-    </Stack>
+    <Card withBorder radius="md" className="bg-card px-0 py-0">
+      <Stack gap={0}>
+        {activities.map((activity, index) => (
+          <Fragment key={activity.id}>
+            {index > 0 && <Divider />}
+            <ActivityItem activity={activity} />
+          </Fragment>
+        ))}
+      </Stack>
+    </Card>
   );
 }
