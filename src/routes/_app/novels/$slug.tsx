@@ -1,15 +1,16 @@
-import { Alert, Badge, Button, Divider, Group, Stack, Text, Title, Tooltip } from "@mantine/core";
+import { Badge, Button, Divider, Group, Stack, Text, Title } from "@mantine/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { format, formatDistanceToNow } from "date-fns";
 import { Dot, Download, ArrowLeft, ArrowRight } from "lucide-react";
 import { GlossarySection } from "#/components/novel/glossary-section";
-import { NovelStatusAlert } from "#/components/novel/novel-status-alert";
+import { LifecycleStepper } from "#/components/novel/lifecycle-stepper";
 import { NovelHistory } from "#/components/novel/novel-history";
 import { SectionHeading } from "#/components/ui/section-heading";
 import { getErrorMessage } from "#/lib/utils";
 import {
   getChaptersQueryOptions,
+  getGlossaryQueryOptions,
   getNovelDetailQueryOptions,
   novelActivityQueryKey,
   novelDetailQueryKey,
@@ -105,6 +106,13 @@ export const Route = createFileRoute("/_app/novels/$slug")({
           : false,
     });
 
+    // A job is running (as opposed to a start-* mutation being pending): the
+    // granular status has already flipped to the in-progress state.
+    const jobRunning =
+      detail?.novel.status === "parsing" ||
+      detail?.novel.status === "extracting" ||
+      detail?.novel.status === "translating";
+
     const startParsingMutation = useMutation({
       mutationFn: () => startParsing({ data: { slug } }),
       onSuccess: async () => {
@@ -132,7 +140,25 @@ export const Route = createFileRoute("/_app/novels/$slug")({
       },
     });
 
-    const { data: chapters } = useQuery({ ...getChaptersQueryOptions(slug) });
+    const { data: chapters } = useQuery({
+      ...getChaptersQueryOptions(slug),
+      // Live stepper progress while a job runs (translated count / names-
+      // extracted count feed the active step's progress bar).
+      refetchInterval: jobRunning ? 3000 : false,
+    });
+
+    // The stepper's per-step counts reuse existing queries: parsed chapters
+    // from the novel detail, glossary size from the glossary query, and the
+    // extract/translate progress from the chapters query.
+    const { data: glossary } = useQuery({ ...getGlossaryQueryOptions(slug) });
+    const glossarySize = glossary?.length ?? 0;
+    const chapterStatuses = chapters ?? [];
+    const namesExtractedChapterCount = chapterStatuses.filter(
+      (chapter) => chapter.status === "names extracted",
+    ).length;
+    const translatedChapterCount = chapterStatuses.filter(
+      (chapter) => chapter.status === "translated",
+    ).length;
 
     const rerunChapterMutation = useMutation({
       mutationFn: (chapterNumber: number) => rerunChapter({ data: { slug, chapterNumber } }),
@@ -149,12 +175,8 @@ export const Route = createFileRoute("/_app/novels/$slug")({
 
     const { novel, chapter_count } = detail;
     const status = novel.status as NovelStatus;
-    const canStartParsing =
-      status === "draft" || status === "parsing failed" || status === "needs review";
     const canStartExtraction =
       status === "ready" || status === "names extracted" || status === "extraction failed";
-    const canStartTranslation =
-      status === "names extracted" || status === "translation failed";
     const isParsing = status === "parsing" || startParsingMutation.isPending;
     const isExtracting = status === "extracting" || startExtractionMutation.isPending;
     const isTranslating = status === "translating" || startTranslationMutation.isPending;
@@ -222,32 +244,40 @@ export const Route = createFileRoute("/_app/novels/$slug")({
               2.5 MB <Dot /> Uploaded {format(novel.created_at, "do MMM yyyy")}
             </Group>
           </OverviewRow>
+        </Stack>
 
-          <NovelStatusAlert
+        <Divider />
+
+        <Stack className="gap-3">
+          <SectionHeading>Lifecycle</SectionHeading>
+          <LifecycleStepper
+            slug={slug}
             status={status}
+            updatedAt={novel.updated_at}
             chapterCount={chapter_count}
             totalChapters={novel.total_chapters}
+            glossarySize={glossarySize}
+            namesExtractedChapterCount={namesExtractedChapterCount}
+            translatedChapterCount={translatedChapterCount}
             lastError={novel.last_error}
-            slug={novel.slug}
-            isParsing={startParsingMutation.isPending}
-            isExtracting={startExtractionMutation.isPending}
-            isTranslating={startTranslationMutation.isPending}
+            isParsing={isParsing}
+            isExtracting={isExtracting}
+            isTranslating={isTranslating}
+            startParsingError={
+              startParsingMutation.error ? getErrorMessage(startParsingMutation.error) : null
+            }
+            startExtractionError={
+              startExtractionMutation.error ? getErrorMessage(startExtractionMutation.error) : null
+            }
+            startTranslationError={
+              startTranslationMutation.error
+                ? getErrorMessage(startTranslationMutation.error)
+                : null
+            }
+            onStartParsing={() => startParsingMutation.mutate()}
+            onStartExtraction={() => startExtractionMutation.mutate()}
+            onStartTranslation={() => startTranslationMutation.mutate()}
           />
-          {startParsingMutation.error && (
-            <Alert variant="light" color="red" title="Could not start parsing">
-              {getErrorMessage(startParsingMutation.error)}
-            </Alert>
-          )}
-          {startExtractionMutation.error && (
-            <Alert variant="light" color="red" title="Could not start extraction">
-              {getErrorMessage(startExtractionMutation.error)}
-            </Alert>
-          )}
-          {startTranslationMutation.error && (
-            <Alert variant="light" color="red" title="Could not start translation">
-              {getErrorMessage(startTranslationMutation.error)}
-            </Alert>
-          )}
         </Stack>
 
         <Divider />
@@ -256,53 +286,6 @@ export const Route = createFileRoute("/_app/novels/$slug")({
           <SectionHeading>Actions</SectionHeading>
 
           <Group className="gap-4">
-            {(isParsing || canStartParsing) && (
-              <Tooltip withArrow label="Parsing in progress - please wait" disabled={!isParsing}>
-                <span className="inline-flex">
-                  <Button
-                    variant="default"
-                    loading={isParsing}
-                    onClick={() => startParsingMutation.mutate()}
-                  >
-                    {status === "draft" ? "Start parsing" : "Re-trigger parsing"}
-                  </Button>
-                </span>
-              </Tooltip>
-            )}
-            {(isExtracting || canStartExtraction) && (
-              <Tooltip
-                withArrow
-                label="Extraction in progress - please wait"
-                disabled={!isExtracting}
-              >
-                <span className="inline-flex">
-                  <Button
-                    variant="default"
-                    loading={isExtracting}
-                    onClick={() => startExtractionMutation.mutate()}
-                  >
-                    {status === "ready" ? "Start extraction" : "Re-run extraction"}
-                  </Button>
-                </span>
-              </Tooltip>
-            )}
-            {(isTranslating || canStartTranslation) && (
-              <Tooltip
-                withArrow
-                label="Translation in progress - please wait"
-                disabled={!isTranslating}
-              >
-                <span className="inline-flex">
-                  <Button
-                    variant="default"
-                    loading={isTranslating}
-                    onClick={() => startTranslationMutation.mutate()}
-                  >
-                    {status === "names extracted" ? "Start translation" : "Re-run translation"}
-                  </Button>
-                </span>
-              </Tooltip>
-            )}
             <Button variant="default" disabled>
               <Download className="size-4" />
               Download raw file
