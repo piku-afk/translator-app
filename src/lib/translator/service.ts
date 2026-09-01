@@ -3,6 +3,7 @@ import {
   chapterFileKey,
   rawFileKey,
   toSlug,
+  translationFileKey,
   type ActivityAction,
   type CreateNovelInput,
   type Novel,
@@ -14,10 +15,12 @@ import type {
   ModelNotesDiff,
   ModelNotesEntry,
   ParseJobMessage,
+  TranslationJobMessage,
   TranslatorPorts,
 } from "./ports";
 import {
   applyGlossaryDiff,
+  filterNamesBySourceText,
   filterNotesBySourceText,
   joinVariations,
   splitVariations,
@@ -40,6 +43,21 @@ export const PARSE_MAX_RETRIES = 3;
  * ticket. On exhaustion the novel moves to `extraction failed`. */
 export const EXTRACTION_MAX_RETRIES = 3;
 
+/**
+ * Retries the translation queue allows per message; must match the wrangler
+ * consumer's `max_retries` (wrangler.jsonc). On exhaustion the novel moves
+ * to `translation failed`. The whole message is one attempt - a retried
+ * message resumes by skipping already-`translated` chapters (see ADR-0008).
+ */
+export const TRANSLATION_MAX_RETRIES = 3;
+
+/**
+ * Bounded concurrency for the parallel translation pass. The low end of the
+ * 4-8 range keeps AI Gateway spend conservative; must match the wrangler
+ * consumer's behaviour so the bound is verifiable in the seam (see ADR-0008).
+ */
+export const TRANSLATION_CONCURRENCY = 4;
+
 export const NOVEL_NOT_FOUND_ERROR = "Novel not found";
 
 /** How the queue consumer should settle a message after runParseJob. */
@@ -47,6 +65,9 @@ export type ParseSettlement = { outcome: "ack" } | { outcome: "retry" };
 
 /** How the queue consumer should settle a message after runExtractionJob. */
 export type ExtractionSettlement = { outcome: "ack" } | { outcome: "retry" };
+
+/** How the queue consumer should settle a message after runTranslationJob. */
+export type TranslationSettlement = { outcome: "ack" } | { outcome: "retry" };
 
 /** A novel plus the parse state the details page needs. */
 export interface NovelDetail {
@@ -88,6 +109,10 @@ export interface TranslatorService {
   startExtraction(slug: string): Promise<Novel>;
   /** One extraction-queue consumer invocation for a single message. */
   runExtractionJob(job: ExtractionJobMessage, attempt: number): Promise<ExtractionSettlement>;
+  /** Explicit, operator-only translation start (never automatic). */
+  startTranslation(slug: string): Promise<Novel>;
+  /** One translation-queue consumer invocation for a single message. */
+  runTranslationJob(job: TranslationJobMessage, attempt: number): Promise<TranslationSettlement>;
   /** The novel's current glossary; empty for a novel that has not been extracted. */
   listGlossary(slug: string): Promise<Glossary>;
   /** Most recent activity rows across all novels, newest first, capped at `limit`. */
@@ -539,6 +564,126 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     }
   }
 
+  async function startTranslation(slug: string): Promise<Novel> {
+    const novel = await findNovelBySlug(slug);
+
+    if (!novel) {
+      throw new Error(NOVEL_NOT_FOUND_ERROR);
+    }
+
+    if (novel.status !== "names extracted" && novel.status !== "translation failed") {
+      throw new Error(
+        `Only names extracted or translation failed novels can start translation (currently "${novel.status}")`,
+      );
+    }
+
+    await setNovelStatus(novel.id, "translating");
+
+    try {
+      await ports.translationQueue.enqueue({ novelId: novel.id });
+    } catch (error) {
+      // The job never made it onto the queue, so the operator was not told the
+      // truth if we stayed in `translating`: revert to the status the novel had
+      // before this call so Start translation can be pressed again.
+      await setNovelStatus(novel.id, novel.status);
+      throw error;
+    }
+
+    // The enqueue committed; only now record the transition.
+    await recordActivity(novel.id, novel.name, "translation started");
+
+    return (await findNovelById(novel.id))!;
+  }
+
+  async function runTranslationJob(
+    job: TranslationJobMessage,
+    attempt: number,
+  ): Promise<TranslationSettlement> {
+    const novel = await findNovelById(job.novelId);
+
+    if (!novel) {
+      return { outcome: "ack" }; // novel gone: nothing left to finalize
+    }
+
+    if (novel.status !== "translating") {
+      return { outcome: "ack" }; // stale/duplicate message: the novel moved on
+    }
+
+    try {
+      // The not-yet-translated chapters, fanned out in parallel with bounded
+      // concurrency. Resume skips `translated` chapters so a retried or
+      // re-triggered pass picks up where it broke instead of re-translating
+      // finished chapters (ADR-0008).
+      const chapters = await db
+        .selectFrom("chapters")
+        .selectAll()
+        .where("novel_id", "=", novel.id)
+        .orderBy("number")
+        .execute();
+      const pending = chapters.filter((chapter) => chapter.status !== "translated");
+
+      const errors: unknown[] = [];
+      await mapWithConcurrency(pending, TRANSLATION_CONCURRENCY, async (chapter) => {
+        try {
+          await translateChapter(novel, chapter);
+        } catch (error) {
+          errors.push(error);
+        }
+      });
+      if (errors.length > 0) throw errors[0];
+
+      // Every eligible chapter translated: the novel is complete.
+      await setNovelStatus(novel.id, "completed", null);
+      await recordActivity(novel.id, novel.name, "translation completed");
+      return { outcome: "ack" };
+    } catch (error) {
+      if (attempt >= TRANSLATION_MAX_RETRIES) {
+        try {
+          await setNovelStatus(novel.id, "translation failed", getErrorMessage(error));
+          await recordActivity(novel.id, novel.name, "translation failed", getErrorMessage(error));
+          return { outcome: "ack" };
+        } catch {
+          // Even recording the failure failed; let the queue retry the message.
+          return { outcome: "retry" };
+        }
+      }
+      return { outcome: "retry" };
+    }
+  }
+
+  /** Translate a single chapter: read text, feed names, write markdown, commit. */
+  async function translateChapter(novel: Novel, chapter: { id: number; number: number }): Promise<void> {
+    // Dispatch-time bookkeeping: flip to `translating` just before the model
+    // call so a failed message never strands a chapter permanently in `translating`.
+    await db
+      .updateTable("chapters")
+      .set({ status: "translating", updated_at: new Date().toISOString() })
+      .where("id", "=", chapter.id)
+      .execute();
+
+    const sourceText = await ports.storage.get(chapterFileKey(novel.slug, chapter.number));
+    if (sourceText === null) {
+      throw new Error(
+        `Chapter file missing on storage for novel "${novel.slug}" chapter ${chapter.number}`,
+      );
+    }
+
+    // Name pairs only - never Notes or descriptions (ADR-0002), and only for
+    // the entities present in this chapter's text to keep the call cheap.
+    const glossary = await loadGlossary(novel.id);
+    const namePairs = filterNamesBySourceText(sourceText, glossary);
+
+    const { markdown } = await ports.model.translate({ sourceText, namePairs });
+
+    // The translated output is the file: write markdown, then commit `translated`.
+    await ports.storage.put(translationFileKey(novel.slug, chapter.number), markdown);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translated", updated_at: new Date().toISOString() })
+      .where("id", "=", chapter.id)
+      .execute();
+  }
+
   async function getNovelDetail(slug: string): Promise<NovelDetail | undefined> {
     const novel = await findNovelBySlug(slug);
     if (!novel) {
@@ -567,6 +712,8 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     startParsing,
     runExtractionJob,
     startExtraction,
+    runTranslationJob,
+    startTranslation,
     getNovelDetail,
     findNovelBySlug,
     listRecentNovels,
@@ -623,6 +770,39 @@ function sameEntry(a: GlossaryEntry, b: GlossaryEntry): boolean {
 /** SQLite reports unique violations as "UNIQUE constraint failed: <table>.<col>". */
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Error && /unique constraint/i.test(error.message);
+}
+
+/**
+ * Run `worker` over `items` with at most `concurrency` in flight, stopping
+ * dispatch on the first error but letting in-flight workers complete (so
+ * nothing is aborted mid-write), then throw the first recorded error, if any.
+ */
+async function mapWithConcurrency<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  if (items.length === 0) return;
+  let nextIndex = 0;
+  let aborted = false;
+  const errors: unknown[] = [];
+
+  const runOne = async (): Promise<void> => {
+    while (nextIndex < items.length && !aborted) {
+      const item = items[nextIndex++];
+      try {
+        await worker(item);
+      } catch (error) {
+        errors.push(error);
+        aborted = true;
+      }
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, items.length) }, () => runOne()),
+  );
+  if (errors.length > 0) throw errors[0];
 }
 
 /** Cast the DB's `string` action to the narrower ActivityAction union. */

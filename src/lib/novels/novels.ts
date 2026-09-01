@@ -68,6 +68,13 @@ export const startExtraction = createServerFn({ method: "POST" })
     return translatorService.startExtraction(data.slug);
   });
 
+export const startTranslation = createServerFn({ method: "POST" })
+  .validator(SlugSchema)
+  .handler(async ({ data }): Promise<Novel> => {
+    await requireAuth();
+    return translatorService.startTranslation(data.slug);
+  });
+
 export function getNovelsQueryOptions() {
   return { queryFn: () => listNovels(), queryKey: novelsQueryKey };
 }

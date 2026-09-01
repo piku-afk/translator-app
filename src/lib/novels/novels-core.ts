@@ -31,6 +31,7 @@ const NOVEL_STATUSES = [
   "names extracted",
   "extraction failed",
   "translating",
+  "translation failed",
   "completed",
 ] as const;
 export type NovelStatus = (typeof NOVEL_STATUSES)[number];
@@ -76,12 +77,17 @@ export function chapterFileKey(slug: string, number: number): string {
   return `novels/${slug}/chapters/${number}.txt`;
 }
 
+/** The R2 key for a translated chapter's markdown file. */
+export function translationFileKey(slug: string, number: number): string {
+  return `novels/${slug}/chapters/${number}.md`;
+}
+
 export const DUPLICATE_NOVEL_ERROR = "A novel with this name already exists";
 
 /**
  * The committed novel-level lifecycle actions recorded as Activity rows. Only
- * these eight are recorded; translation-stage actions are reserved for when
- * translation is wired up.
+ * these eleven are recorded; each stage mirrors its enqueue success and its
+ * failure finalizer.
  */
 const ACTIVITY_ACTIONS = [
   "novel created",
@@ -92,5 +98,8 @@ const ACTIVITY_ACTIONS = [
   "extraction started",
   "names extracted",
   "extraction failed",
+  "translation started",
+  "translation completed",
+  "translation failed",
 ] as const;
 export type ActivityAction = (typeof ACTIVITY_ACTIONS)[number];

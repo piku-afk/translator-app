@@ -5,11 +5,14 @@ import { up as createNovelsTable } from "../../../migrations/001_create_novels.t
 import { up as rebuildNovelsCreateChapters } from "../../../migrations/003_add_failed_status_and_chapters.ts";
 import { up as createGlossaryAndStageStatuses } from "../../../migrations/004_create_glossary_and_stage_statuses.ts";
 import { up as createActivity } from "../../../migrations/005_create_activity.ts";
+import { up as addTranslationFailedToNovels } from "../../../migrations/007_add_translation_failed_status.ts";
+import { up as addTranslationActivityActions } from "../../../migrations/008_add_translation_activity_actions.ts";
 import type { Database } from "../database/database";
 import {
   DUPLICATE_NOVEL_ERROR,
   chapterFileKey,
   rawFileKey,
+  translationFileKey,
   type CreateNovelInput,
   type Novel,
 } from "../novels/novels-core";
@@ -17,6 +20,8 @@ import {
   EXTRACTION_MAX_RETRIES,
   NOVEL_NOT_FOUND_ERROR,
   PARSE_MAX_RETRIES,
+  TRANSLATION_CONCURRENCY,
+  TRANSLATION_MAX_RETRIES,
   createTranslatorService,
 } from "./service";
 import type {
@@ -26,6 +31,7 @@ import type {
   ParseJobMessage,
   ParseQueuePort,
 } from "./ports";
+import type { NamePair } from "./glossary";
 
 // ---------------------------------------------------------------------------
 // Port doubles: in-memory storage/queue, real Kysely over in-memory SQLite.
@@ -41,6 +47,8 @@ async function createTestDb(): Promise<Kysely<Database>> {
     rebuildNovelsCreateChapters,
     createGlossaryAndStageStatuses,
     createActivity,
+    addTranslationFailedToNovels,
+    addTranslationActivityActions,
   ]) {
     await up(db);
   }
@@ -87,7 +95,12 @@ function createMemoryQueue(): ParseQueuePort & {
 }
 
 interface FakeModel extends ModelPort {
-  calls: Array<{ chapterNumber: number; fn: "getNotesDiff"; sourceText: string }>;
+  calls: Array<{
+    chapterNumber: number;
+    fn: "getNotesDiff" | "translate";
+    sourceText: string;
+    namePairs?: NamePair[];
+  }>;
   setFailing(failing: boolean): void;
 }
 
@@ -121,6 +134,12 @@ function createFakeModel(): FakeModel {
       };
       return { notesChanges: notes };
     },
+    async translate({ sourceText, namePairs }) {
+      calls.push({ chapterNumber: 0, fn: "translate", sourceText, namePairs });
+      if (failing) throw new Error("model unavailable");
+      const chapter = sourceText.trim().split(/\s+/)[0].replace(/[^0-9]/g, "") || "0";
+      return { markdown: `# Chapter ${chapter}\n\nTranslated ${namePairs.length} names.` };
+    },
   };
 }
 
@@ -129,15 +148,17 @@ async function makeService() {
   const storage = createMemoryStorage();
   const parseQueue = createMemoryQueue();
   const extractionQueue = createMemoryQueue();
+  const translationQueue = createMemoryQueue();
   const model = createFakeModel();
   const service = createTranslatorService({
     db,
     storage,
     parseQueue,
     extractionQueue,
+    translationQueue,
     model,
   });
-  return { db, storage, parseQueue, extractionQueue, model, service };
+  return { db, storage, parseQueue, extractionQueue, translationQueue, model, service };
 }
 
 const validInput: CreateNovelInput = {
@@ -763,6 +784,251 @@ describe("runExtractionJob", () => {
     const { service } = await makeService();
 
     expect(await service.runExtractionJob({ novelId: 4242 }, 1)).toEqual({ outcome: "ack" });
+  });
+});
+
+describe("startTranslation", () => {
+  it("enqueues a translation job and flips the novel to translating", async () => {
+    const { db, translationQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "names extracted" });
+
+    const updated = await service.startTranslation(novel.slug);
+
+    expect(updated.status).toBe("translating");
+    expect(translationQueue.jobs).toEqual([{ novelId: novel.id }]);
+    expect((await refetchNovel(db, novel.id)).status).toBe("translating");
+  });
+
+  it("rejects statuses other than names extracted or translation failed", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "ready" });
+
+    await expect(service.startTranslation(novel.slug)).rejects.toThrow(
+      "Only names extracted or translation failed novels can start translation",
+    );
+  });
+
+  it("rejects an unknown slug", async () => {
+    const { service } = await makeService();
+
+    await expect(service.startTranslation("missing")).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
+  });
+
+  it("reverts the novel to its prior status when the enqueue fails", async () => {
+    const { db, translationQueue, service } = await makeService();
+    const novel = await seedNovel(db, { status: "names extracted" });
+    translationQueue.setFailing(true);
+
+    await expect(service.startTranslation(novel.slug)).rejects.toThrow("queue unavailable");
+
+    expect((await refetchNovel(db, novel.id)).status).toBe("names extracted");
+  });
+
+  it("records translation-started on a committed enqueue", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "names extracted" });
+
+    await service.startTranslation(novel.slug);
+
+    const rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows.map((r) => r.action)).toEqual(["translation started"]);
+  });
+});
+
+describe("runTranslationJob", () => {
+  /** Seed a `translating` novel with `numbers` chapter rows + files + glossary. */
+  async function seedTranslatingNovel(
+    db: Kysely<Database>,
+    storage: ReturnType<typeof createMemoryStorage>,
+    numbers: number[],
+  ): Promise<Novel> {
+    const novel = await seedNovel(db, { status: "translating", total_chapters: numbers.length });
+    for (const number of numbers) {
+      await seedChapter(db, novel.id, number);
+      await storage.put(chapterFileKey(novel.slug, number), `${number}화.\n본문 ${number} 입니다.`);
+      await db
+        .insertInto("glossary_entries")
+        .values({
+          novel_id: novel.id,
+          category: "characters",
+          source_names: `${number}화`,
+          english_names: `Chapter ${number}`,
+          description: `character of chapter ${number}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .execute();
+    }
+    return novel;
+  }
+
+  it("translates all chapters, writes markdown, and reaches completed", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedTranslatingNovel(db, storage, [1, 2]);
+
+    const settlement = await service.runTranslationJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const chapters = await db.selectFrom("chapters").selectAll().orderBy("number").execute();
+    expect(chapters.map((c) => c.status)).toEqual(["translated", "translated"]);
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("completed");
+    expect(updated.last_error).toBeNull();
+    expect(model.calls.filter((c) => c.fn === "translate")).toHaveLength(2);
+    expect(storage.objects.get(translationFileKey(novel.slug, 1))).toContain("# Chapter 1");
+    expect(storage.objects.get(translationFileKey(novel.slug, 2))).toContain("# Chapter 2");
+  });
+
+  it("feeds the model only Name pairs, never notes or descriptions", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedTranslatingNovel(db, storage, [1]);
+
+    await service.runTranslationJob({ novelId: novel.id }, 1);
+
+    const translateCalls = model.calls.filter((c) => c.fn === "translate");
+    expect(translateCalls).toHaveLength(1);
+    expect(translateCalls[0].namePairs).toEqual([
+      { source_names: "1화", english_names: "Chapter 1" },
+    ]);
+  });
+
+  it("resumes from the last translated chapter, skipping translated chapters", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedTranslatingNovel(db, storage, [1, 2]);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translated", updated_at: new Date().toISOString() })
+      .where("novel_id", "=", novel.id)
+      .where("number", "=", 1)
+      .execute();
+    await storage.put(translationFileKey(novel.slug, 1), "# Chapter 1\n\nExisting.");
+
+    const settlement = await service.runTranslationJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const translateCalls = model.calls.filter((c) => c.fn === "translate");
+    expect(translateCalls).toHaveLength(1);
+    expect(translateCalls[0].sourceText).toContain("2화");
+    const chapters = await db.selectFrom("chapters").selectAll().orderBy("number").execute();
+    expect(chapters.map((c) => c.status)).toEqual(["translated", "translated"]);
+    // Chapter 1's markdown was not overwritten.
+    expect(storage.objects.get(translationFileKey(novel.slug, 1))).toBe("# Chapter 1\n\nExisting.");
+  });
+
+  it("bounds concurrency to TRANSLATION_CONCURRENCY", async () => {
+    const db = await createTestDb();
+    const storage = createMemoryStorage();
+    const translationQueue = createMemoryQueue();
+    const modelPort = { ...createFakeModel() };
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const originalTranslate = modelPort.translate.bind(modelPort);
+    modelPort.translate = async (params) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const result = await originalTranslate(params);
+      inFlight -= 1;
+      return result;
+    };
+    const service = createTranslatorService({
+      db,
+      storage,
+      parseQueue: createMemoryQueue() as never,
+      extractionQueue: createMemoryQueue() as never,
+      translationQueue,
+      model: modelPort,
+    });
+    const numbers = [1, 2, 3, 4, 5, 6, 7, 8];
+    const novel = await seedNovel(db, { status: "translating", total_chapters: numbers.length });
+    for (const n of numbers) {
+      await seedChapter(db, novel.id, n);
+      await storage.put(chapterFileKey(novel.slug, n), `${n}화.\n본문 ${n} 입니다.`);
+      await db
+        .insertInto("glossary_entries")
+        .values({
+          novel_id: novel.id,
+          category: "characters",
+          source_names: `${n}화`,
+          english_names: `Chapter ${n}`,
+          description: `character of chapter ${n}`,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .execute();
+    }
+
+    await service.runTranslationJob({ novelId: novel.id }, 1);
+
+    expect(maxInFlight).toBeLessThanOrEqual(TRANSLATION_CONCURRENCY);
+  });
+
+  it("requests a retry on a transient model error, leaving the novel translating", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedTranslatingNovel(db, storage, [1]);
+    model.setFailing(true);
+
+    const settlement = await service.runTranslationJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "retry" });
+    expect((await refetchNovel(db, novel.id)).status).toBe("translating");
+  });
+
+  it("moves the novel to translation failed with last_error once retries are exhausted", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedTranslatingNovel(db, storage, [1]);
+    model.setFailing(true);
+
+    const settlement = await service.runTranslationJob(
+      { novelId: novel.id },
+      TRANSLATION_MAX_RETRIES,
+    );
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const updated = await refetchNovel(db, novel.id);
+    expect(updated.status).toBe("translation failed");
+    expect(updated.last_error).toContain("model unavailable");
+  });
+
+  it("records translation-completed on success", async () => {
+    const { db, service, storage } = await makeService();
+    const novel = await seedTranslatingNovel(db, storage, [1]);
+
+    await service.runTranslationJob({ novelId: novel.id }, 1);
+
+    const rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows.map((r) => r.action)).toEqual(["translation completed"]);
+  });
+
+  it("records translation-failed only on retry exhaustion, not on a transient retry", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedTranslatingNovel(db, storage, [1]);
+    model.setFailing(true);
+
+    expect((await service.runTranslationJob({ novelId: novel.id }, 1)).outcome).toBe("retry");
+    expect(await db.selectFrom("activity").selectAll().execute()).toHaveLength(0);
+
+    expect(
+      (await service.runTranslationJob({ novelId: novel.id }, TRANSLATION_MAX_RETRIES)).outcome,
+    ).toBe("ack");
+    const rows = await db.selectFrom("activity").selectAll().execute();
+    expect(rows.map((r) => r.action)).toEqual(["translation failed"]);
+    expect(rows[0].detail).toContain("model unavailable");
+  });
+
+  it("acks stale messages for novels no longer translating", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "completed" });
+
+    const settlement = await service.runTranslationJob({ novelId: novel.id }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+  });
+
+  it("acks messages for unknown novels", async () => {
+    const { service } = await makeService();
+
+    expect(await service.runTranslationJob({ novelId: 4242 }, 1)).toEqual({ outcome: "ack" });
   });
 });
 

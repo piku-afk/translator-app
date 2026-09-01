@@ -10,6 +10,7 @@ export const STATUS_BADGE_COLORS: Record<NovelStatus, string> = {
   "names extracted": "green",
   "extraction failed": "red",
   translating: "blue",
+  "translation failed": "red",
   ready: "green",
   completed: "green",
 };
@@ -24,6 +25,7 @@ export const STATUS_ACTION_VERBS: Record<NovelStatus, string> = {
   "names extracted": "Extracted",
   "extraction failed": "Failed",
   translating: "Started translating",
+  "translation failed": "Failed",
   ready: "Reviewed",
   completed: "Completed",
 };

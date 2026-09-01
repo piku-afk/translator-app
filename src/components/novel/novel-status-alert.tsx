@@ -10,6 +10,7 @@ export function NovelStatusAlert({
   slug,
   isParsing,
   isExtracting,
+  isTranslating,
 }: {
   status: NovelStatus;
   chapterCount: number;
@@ -18,8 +19,11 @@ export function NovelStatusAlert({
   slug: string;
   isParsing: boolean;
   isExtracting: boolean;
+  isTranslating: boolean;
 }) {
-  const color = STATUS_BADGE_COLORS[isParsing ? "parsing" : isExtracting ? "extracting" : status];
+  const color = STATUS_BADGE_COLORS[
+    isParsing ? "parsing" : isExtracting ? "extracting" : isTranslating ? "translating" : status
+  ];
   if (isParsing) {
     return (
       <Alert variant="light" color={color} title="Parsing in progress">
@@ -31,6 +35,13 @@ export function NovelStatusAlert({
     return (
       <Alert variant="light" color={color} title="Extraction in progress">
         The glossary is being built chapter by chapter.
+      </Alert>
+    );
+  }
+  if (isTranslating) {
+    return (
+      <Alert variant="light" color={color} title="Translation in progress">
+        Each chapter is being translated in parallel.
       </Alert>
     );
   }
@@ -60,6 +71,13 @@ export function NovelStatusAlert({
         <Alert variant="light" color={color} title="Extraction failed">
           {lastError ?? "Extraction failed for an unknown reason"}. Re-trigger extraction to
           resume from the last completed chapter.
+        </Alert>
+      );
+    case "translation failed":
+      return (
+        <Alert variant="light" color={color} title="Translation failed">
+          {lastError ?? "Translation failed for an unknown reason"}. Re-trigger translation to
+          resume from the last translated chapter.
         </Alert>
       );
     case "names extracted":

@@ -2,9 +2,11 @@ import {
   BookCheck,
   CircleDot,
   FileCheck,
+  FileCheck2,
   FileSearchIcon,
   FileScan,
   FileXIcon,
+  Languages,
   type LucideIcon,
 } from "lucide-react";
 import type { ActivityAction } from "#/lib/novels/novels-core";
@@ -18,6 +20,9 @@ const ACTIVITY_ICONS: Record<ActivityAction, LucideIcon> = {
   "extraction started": FileScan,
   "names extracted": FileCheck,
   "extraction failed": FileXIcon,
+  "translation started": Languages,
+  "translation completed": FileCheck2,
+  "translation failed": FileXIcon,
 };
 
 export function ActivityIcon({

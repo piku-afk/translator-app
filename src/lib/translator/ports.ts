@@ -1,6 +1,6 @@
 import type { Kysely } from "kysely";
 import type { Database } from "../database/database";
-import type { GlossaryCategory } from "./glossary";
+import type { GlossaryCategory, NamePair } from "./glossary";
 
 /**
  * Message enqueued on the parse queue. Deliberately minimal: the consumer
@@ -16,6 +16,14 @@ export interface ParseJobMessage {
  * consumer re-reads the novel's authoritative state when the job runs.
  */
 export interface ExtractionJobMessage {
+  novelId: number;
+}
+
+/**
+ * Message enqueued on the translation queue. Like the parse message, the
+ * consumer re-reads the novel's authoritative state when the job runs.
+ */
+export interface TranslationJobMessage {
   novelId: number;
 }
 
@@ -38,6 +46,11 @@ export interface ParseQueuePort {
 /** Queue carrying extraction jobs (Cloudflare Queues in production). */
 export interface ExtractionQueuePort {
   enqueue(job: ExtractionJobMessage): Promise<void>;
+}
+
+/** Queue carrying translation jobs (Cloudflare Queues in production). */
+export interface TranslationQueuePort {
+  enqueue(job: TranslationJobMessage): Promise<void>;
 }
 
 /**
@@ -66,7 +79,9 @@ export interface ModelNotesDeletion {
   category: GlossaryCategory;
 }
 
-/** The model's per-chapter notes diff, in the model's own shape. */
+/**
+ * The model's per-chapter notes diff, in the model's own shape.
+ */
 export interface ModelNotesDiff {
   updates: ModelNotesEntry[];
   additions: ModelNotesAddition[];
@@ -89,6 +104,12 @@ export interface ModelPort {
     sourceText: string;
     filteredNotes: ModelNotesEntry[];
   }): Promise<{ notesChanges: ModelNotesDiff }>;
+
+  /** Render a chapter's source text into English markdown from its name pairs. */
+  translate(params: {
+    sourceText: string;
+    namePairs: NamePair[];
+  }): Promise<{ markdown: string }>;
 }
 
 /**
@@ -101,5 +122,6 @@ export interface TranslatorPorts {
   storage: ObjectStorePort;
   parseQueue: ParseQueuePort;
   extractionQueue: ExtractionQueuePort;
+  translationQueue: TranslationQueuePort;
   model: ModelPort;
 }
