@@ -5,6 +5,7 @@ import type { Glossary } from "../translator/glossary";
 import {
   NOVEL_NOT_FOUND_ERROR,
   type ActivityRow,
+  type ChapterSummary,
   type NovelDetail,
   type NovelSummary,
 } from "../translator/service";
@@ -81,6 +82,26 @@ export function getNovelsQueryOptions() {
 
 export function getRecentNovelsQueryOptions() {
   return { queryFn: () => listRecentNovels(), queryKey: recentNovelsQueryKey };
+}
+
+const RerunSchema = z.object({ slug: z.string().min(1), chapterNumber: z.number().int().positive() });
+
+export const rerunChapter = createServerFn({ method: "POST" })
+  .validator(RerunSchema)
+  .handler(async ({ data }): Promise<Novel> => {
+    await requireAuth();
+    return translatorService.rerunChapter(data.slug, data.chapterNumber);
+  });
+
+const getChapters = createServerFn()
+  .validator(SlugSchema)
+  .handler(async ({ data }): Promise<ChapterSummary[]> => {
+    await requireAuth();
+    return translatorService.listChapters(data.slug);
+  });
+
+export function getChaptersQueryOptions(slug: string) {
+  return { queryFn: () => getChapters({ data: { slug } }), queryKey: ["novels", slug, "chapters"] as const };
 }
 
 export function getNovelDetailQueryOptions(slug: string) {

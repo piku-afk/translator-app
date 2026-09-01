@@ -40,6 +40,10 @@
         "binding": "TRANSLATION_QUEUE",
         "queue": "translator-prod-translation-queue",
       },
+      {
+        "binding": "RERUN_QUEUE",
+        "queue": "translator-prod-rerun-queue",
+      },
     ],
     "consumers": [
       {
@@ -63,6 +67,13 @@
         // on exhaustion the novel moves to `translation failed`.
         "max_retries": 3,
         "dead_letter_queue": "translator-translation-dlq",
+      },
+      {
+        "queue": "translator-prod-rerun-queue",
+        // Must match RERUN_MAX_RETRIES in src/lib/translator/service.ts:
+        // on exhaustion the chapter moves to `failed`.
+        "max_retries": 3,
+        "dead_letter_queue": "translator-rerun-dlq",
       },
     ],
   },

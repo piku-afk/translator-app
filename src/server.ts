@@ -2,6 +2,7 @@ import handler, { createServerEntry } from "@tanstack/react-start/server-entry";
 import type {
   ExtractionJobMessage,
   ParseJobMessage,
+  RerunJobMessage,
   TranslationJobMessage,
 } from "./lib/translator/ports";
 import { translatorService } from "./lib/translator/translator.server";
@@ -19,6 +20,9 @@ const EXTRACTION_QUEUE_NAME = "translator-prod-extraction-queue";
 
 /** The translation queue name this worker consumes, matching wrangler.jsonc. */
 const TRANSLATION_QUEUE_NAME = "translator-prod-translation-queue";
+
+/** The rerun queue name this worker consumes, matching wrangler.jsonc. */
+const RERUN_QUEUE_NAME = "translator-prod-rerun-queue";
 
 const server = createServerEntry({
   fetch(incomingRequest) {
@@ -47,7 +51,7 @@ export default {
    * including a finalized novel on retry exhaustion) or asked for another
    * attempt ("retry").
    */
-  async queue(batch: MessageBatch<ParseJobMessage | ExtractionJobMessage | TranslationJobMessage>): Promise<void> {
+  async queue(batch: MessageBatch<ParseJobMessage | ExtractionJobMessage | TranslationJobMessage | RerunJobMessage>): Promise<void> {
     if (batch.queue === EXTRACTION_QUEUE_NAME) {
       for (const message of batch.messages) {
         const settlement = await translatorService.runExtractionJob(
@@ -67,6 +71,21 @@ export default {
       for (const message of batch.messages) {
         const settlement = await translatorService.runTranslationJob(
           message.body as TranslationJobMessage,
+          message.attempts,
+        );
+        if (settlement.outcome === "retry") {
+          message.retry();
+        } else {
+          message.ack();
+        }
+      }
+      return;
+    }
+
+    if (batch.queue === RERUN_QUEUE_NAME) {
+      for (const message of batch.messages) {
+        const settlement = await translatorService.runRerunJob(
+          message.body as RerunJobMessage,
           message.attempts,
         );
         if (settlement.outcome === "retry") {

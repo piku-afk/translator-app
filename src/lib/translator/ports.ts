@@ -28,6 +28,16 @@ export interface TranslationJobMessage {
 }
 
 /**
+ * Message enqueued on the rerun queue: re-extract and re-translate a
+ * single, already-handled chapter of a novel. Carries the chapter `number`
+ * (not its DB id) because a rerun is addressed by the operator-visible
+ * chapter index, and the consumer re-reads authoritative state when it runs.
+ */
+export interface RerunJobMessage {
+  novelId: number;
+  chapterNumber: number;
+}
+/**
  * Durable text-object storage backing novels (R2 in production). Keys are
  * namespaced per novel: `novels/<slug>/raw` and `novels/<slug>/chapters/<n>.txt`.
  */
@@ -51,6 +61,11 @@ export interface ExtractionQueuePort {
 /** Queue carrying translation jobs (Cloudflare Queues in production). */
 export interface TranslationQueuePort {
   enqueue(job: TranslationJobMessage): Promise<void>;
+}
+
+/** Queue carrying chapter-rerun jobs (Cloudflare Queues in production). */
+export interface RerunQueuePort {
+  enqueue(job: RerunJobMessage): Promise<void>;
 }
 
 /**
@@ -123,5 +138,6 @@ export interface TranslatorPorts {
   parseQueue: ParseQueuePort;
   extractionQueue: ExtractionQueuePort;
   translationQueue: TranslationQueuePort;
+  rerunQueue: RerunQueuePort;
   model: ModelPort;
 }

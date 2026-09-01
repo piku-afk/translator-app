@@ -20,6 +20,7 @@ import {
   EXTRACTION_MAX_RETRIES,
   NOVEL_NOT_FOUND_ERROR,
   PARSE_MAX_RETRIES,
+  RERUN_MAX_RETRIES,
   TRANSLATION_CONCURRENCY,
   TRANSLATION_MAX_RETRIES,
   createTranslatorService,
@@ -149,6 +150,7 @@ async function makeService() {
   const parseQueue = createMemoryQueue();
   const extractionQueue = createMemoryQueue();
   const translationQueue = createMemoryQueue();
+  const rerunQueue = createMemoryQueue();
   const model = createFakeModel();
   const service = createTranslatorService({
     db,
@@ -156,9 +158,10 @@ async function makeService() {
     parseQueue,
     extractionQueue,
     translationQueue,
+    rerunQueue,
     model,
   });
-  return { db, storage, parseQueue, extractionQueue, translationQueue, model, service };
+  return { db, storage, parseQueue, extractionQueue, translationQueue, rerunQueue, model, service };
 }
 
 const validInput: CreateNovelInput = {
@@ -937,6 +940,7 @@ describe("runTranslationJob", () => {
       parseQueue: createMemoryQueue() as never,
       extractionQueue: createMemoryQueue() as never,
       translationQueue,
+      rerunQueue: createMemoryQueue() as never,
       model: modelPort,
     });
     const numbers = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -1029,6 +1033,248 @@ describe("runTranslationJob", () => {
     const { service } = await makeService();
 
     expect(await service.runTranslationJob({ novelId: 4242 }, 1)).toEqual({ outcome: "ack" });
+  });
+});
+
+describe("rerunChapter", () => {
+  /** Seed a `completed` novel with `number`s of already-handled chapters. */
+  async function seedRerunnableNovel(
+    db: Kysely<Database>,
+    storage: ReturnType<typeof createMemoryStorage>,
+    numbers: number[],
+  ): Promise<Novel> {
+    const novel = await seedNovel(db, { status: "completed", total_chapters: numbers.length });
+    for (const number of numbers) {
+      await seedChapter(db, novel.id, number);
+      await storage.put(chapterFileKey(novel.slug, number), `${number}화.\n본문 ${number} 입니다.`);
+      await storage.put(translationFileKey(novel.slug, number), `# Chapter ${number}\n\nOld markdown.`);
+      await db
+        .updateTable("chapters")
+        .set({ status: "translated", updated_at: new Date().toISOString() })
+        .where("novel_id", "=", novel.id)
+        .where("number", "=", number)
+        .execute();
+    }
+    return novel;
+  }
+
+  it("flips the chapter to translating and enqueues a rerun job", async () => {
+    const { db, rerunQueue, service, storage } = await makeService();
+    const novel = await seedRerunnableNovel(db, storage, [1, 2]);
+
+    await service.rerunChapter(novel.slug, 1);
+
+    expect(rerunQueue.jobs).toEqual([{ novelId: novel.id, chapterNumber: 1 }]);
+    const chapter = await db
+      .selectFrom("chapters")
+      .select("status")
+      .where("novel_id", "=", novel.id)
+      .where("number", "=", 1)
+      .executeTakeFirst();
+    expect(chapter?.status).toBe("translating");
+  });
+
+  it("rejects non-rerunnable chapter statuses", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "completed", total_chapters: 1 });
+    await seedChapter(db, novel.id, 1);
+    // status defaults to `queued` - not rerunnable.
+
+    await expect(service.rerunChapter(novel.slug, 1)).rejects.toThrow(
+      "Only translated or failed chapters can be rerun",
+    );
+  });
+
+  it("rejects rerun during an active pass", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "translating", total_chapters: 1 });
+    await seedChapter(db, novel.id, 1);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translated", updated_at: new Date().toISOString() })
+      .where("novel_id", "=", novel.id)
+      .execute();
+
+    await expect(service.rerunChapter(novel.slug, 1)).rejects.toThrow(
+      'Cannot rerun a chapter while the novel is "translating"',
+    );
+  });
+
+  it("rejects unknown novel", async () => {
+    const { service } = await makeService();
+    await expect(service.rerunChapter("missing", 1)).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
+  });
+
+  it("rejects an unknown chapter number", async () => {
+    const { db, service, storage } = await makeService();
+    const novel = await seedRerunnableNovel(db, storage, [1]);
+
+    await expect(service.rerunChapter(novel.slug, 99)).rejects.toThrow(/not found/i);
+  });
+
+  it("reverts the chapter status if enqueue fails", async () => {
+    const { db, rerunQueue, service, storage } = await makeService();
+    rerunQueue.setFailing(true);
+    const novel = await seedRerunnableNovel(db, storage, [1]);
+
+    await expect(service.rerunChapter(novel.slug, 1)).rejects.toThrow("queue unavailable");
+    const chapter = await db
+      .selectFrom("chapters")
+      .select("status")
+      .where("novel_id", "=", novel.id)
+      .where("number", "=", 1)
+      .executeTakeFirst();
+    expect(chapter?.status).toBe("translated");
+  });
+});
+
+describe("runRerunJob", () => {
+  it("re-extracts and re-translates, overwrites markdown, and commits translated", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedNovel(db, { status: "completed", total_chapters: 1 });
+    await seedChapter(db, novel.id, 1);
+    await storage.put(chapterFileKey(novel.slug, 1), `1화.\n본문 1 입니다.`);
+    await storage.put(translationFileKey(novel.slug, 1), `# Chapter 1\n\nOld markdown.`);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translating", updated_at: new Date().toISOString() })
+      .where("novel_id", "=", novel.id)
+      .execute();
+
+    const settlement = await service.runRerunJob({ novelId: novel.id, chapterNumber: 1 }, 1);
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const chapter = await db
+      .selectFrom("chapters")
+      .select(["status"])
+      .where("novel_id", "=", novel.id)
+      .where("number", "=", 1)
+      .executeTakeFirst();
+    expect(chapter?.status).toBe("translated");
+    // Novel status untouched.
+    expect((await refetchNovel(db, novel.id)).status).toBe("completed");
+    // Overwritten markdown.
+    expect(storage.objects.get(translationFileKey(novel.slug, 1))).toContain("# Chapter 1");
+    // No novel-level Activity recorded.
+    expect(await db.selectFrom("activity").selectAll().execute()).toHaveLength(0);
+    // Both model calls happened: extraction (notes) + translation.
+    const fns = model.calls.map((c) => c.fn);
+    expect(fns).toContain("getNotesDiff");
+    expect(fns).toContain("translate");
+  });
+
+  it("does not duplicate glossary entries on repeat rerun", async () => {
+    const { db, service, storage } = await makeService();
+    const novel = await seedNovel(db, { status: "completed", total_chapters: 1 });
+    await seedChapter(db, novel.id, 1);
+    await storage.put(chapterFileKey(novel.slug, 1), `1화.\n본문 1 입니다.`);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translating", updated_at: new Date().toISOString() })
+      .where("novel_id", "=", novel.id)
+      .execute();
+
+    await service.runRerunJob({ novelId: novel.id, chapterNumber: 1 }, 1);
+    // The first rerun commits the chapter to `translated`; a second message is
+    // stale (chapter no longer `translating`) and acks without reworking.
+    await service.runRerunJob({ novelId: novel.id, chapterNumber: 1 }, 1);
+
+    const count = await db.selectFrom("glossary_entries").selectAll().execute();
+    expect(count).toHaveLength(1);
+  });
+
+  it("marks the chapter failed on retry exhaustion", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedNovel(db, { status: "completed", total_chapters: 1 });
+    await seedChapter(db, novel.id, 1);
+    await storage.put(chapterFileKey(novel.slug, 1), `1화.\n본문 1 입니다.`);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translating", updated_at: new Date().toISOString() })
+      .where("novel_id", "=", novel.id)
+      .execute();
+    model.setFailing(true);
+
+    const settlement = await service.runRerunJob(
+      { novelId: novel.id, chapterNumber: 1 },
+      RERUN_MAX_RETRIES,
+    );
+
+    expect(settlement).toEqual({ outcome: "ack" });
+    const chapter = await db
+      .selectFrom("chapters")
+      .select(["status"])
+      .where("novel_id", "=", novel.id)
+      .where("number", "=", 1)
+      .executeTakeFirst();
+    expect(chapter?.status).toBe("failed");
+  });
+
+  it("requests a retry on a transient failure", async () => {
+    const { db, model, service, storage } = await makeService();
+    const novel = await seedNovel(db, { status: "completed", total_chapters: 1 });
+    await seedChapter(db, novel.id, 1);
+    await storage.put(chapterFileKey(novel.slug, 1), `1화.\n본문 1 입니다.`);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translating", updated_at: new Date().toISOString() })
+      .where("novel_id", "=", novel.id)
+      .execute();
+    model.setFailing(true);
+
+    const settlement = await service.runRerunJob({ novelId: novel.id, chapterNumber: 1 }, 1);
+
+    expect(settlement).toEqual({ outcome: "retry" });
+    expect((await refetchNovel(db, novel.id)).status).toBe("completed");
+  });
+
+  it("acks messages when the chapter is not translating", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "completed", total_chapters: 1 });
+    await seedChapter(db, novel.id, 1);
+    // status stays `translated` - message is stale.
+    await db
+      .updateTable("chapters")
+      .set({ status: "translated", updated_at: new Date().toISOString() })
+      .where("novel_id", "=", novel.id)
+      .execute();
+
+    expect(await service.runRerunJob({ novelId: novel.id, chapterNumber: 1 }, 1)).toEqual({
+      outcome: "ack",
+    });
+  });
+
+  it("acks messages for unknown novels or chapters", async () => {
+    const { service } = await makeService();
+
+    expect(await service.runRerunJob({ novelId: 4242, chapterNumber: 1 }, 1)).toEqual({
+      outcome: "ack",
+    });
+  });
+});
+
+describe("listChapters", () => {
+  it("returns per-chapter stage rows ordered by number", async () => {
+    const { db, service } = await makeService();
+    const novel = await seedNovel(db, { status: "completed", total_chapters: 2 });
+    await seedChapter(db, novel.id, 2);
+    await seedChapter(db, novel.id, 1);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translated", updated_at: new Date().toISOString() })
+      .where("novel_id", "=", novel.id)
+      .execute();
+
+    const chapters = await service.listChapters(novel.slug);
+
+    expect(chapters.map((c) => c.number)).toEqual([1, 2]);
+    expect(chapters.every((c) => c.status === "translated")).toBe(true);
+  });
+
+  it("throws for an unknown novel", async () => {
+    const { service } = await makeService();
+
+    await expect(service.listChapters("missing")).rejects.toThrow(NOVEL_NOT_FOUND_ERROR);
   });
 });
 

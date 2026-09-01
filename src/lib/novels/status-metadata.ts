@@ -1,5 +1,17 @@
 import type { NovelStatus } from "./novels-core";
 
+/** A chapter's stage state within the translation pipeline. */
+export type ChapterStatus = "queued" | "names extracted" | "translating" | "translated" | "failed";
+
+/** Mantine color for each chapter status badge. */
+export const CHAPTER_STATUS_COLORS: Record<ChapterStatus, string> = {
+  queued: "gray",
+  "names extracted": "cyan",
+  translating: "blue",
+  translated: "green",
+  failed: "red",
+};
+
 /** Mantine color for each status badge. */
 export const STATUS_BADGE_COLORS: Record<NovelStatus, string> = {
   draft: "gray",

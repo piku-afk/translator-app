@@ -9,15 +9,17 @@ import { NovelHistory } from "#/components/novel/novel-history";
 import { SectionHeading } from "#/components/ui/section-heading";
 import { getErrorMessage } from "#/lib/utils";
 import {
+  getChaptersQueryOptions,
   getNovelDetailQueryOptions,
   novelActivityQueryKey,
   novelDetailQueryKey,
   novelsQueryKey,
+  rerunChapter,
   startExtraction,
   startParsing,
   startTranslation,
 } from "#/lib/novels/novels";
-import { STATUS_ACTION_VERBS, STATUS_BADGE_COLORS } from "#/lib/novels/status-metadata";
+import { CHAPTER_STATUS_COLORS, STATUS_ACTION_VERBS, STATUS_BADGE_COLORS } from "#/lib/novels/status-metadata";
 import { NOVEL_NOT_FOUND_ERROR } from "#/lib/translator/service";
 import {
   rawFileKey,
@@ -31,6 +33,46 @@ function OverviewRow({ label, children }: { label: string; children: React.React
     <Group className="items-baseline gap-4" wrap="nowrap">
       <Text className="w-28 shrink-0 text-sm text-muted-foreground">{label}</Text>
       {children}
+    </Group>
+  );
+}
+
+function ChapterRow({
+  number,
+  status,
+  canRerun,
+  isRerunning,
+  onRerun,
+}: {
+  number: number;
+  status: string;
+  canRerun: boolean;
+  isRerunning: boolean;
+  onRerun: () => void;
+}) {
+  const chapterStatus = status as "queued" | "names extracted" | "translating" | "translated" | "failed";
+  return (
+    <Group className="w-full justify-between gap-4 py-1">
+      <Group className="gap-3">
+        <Text className="w-8 text-sm font-medium">#{number}</Text>
+        <Badge
+          variant={CHAPTER_STATUS_COLORS[chapterStatus] ? "light" : "default"}
+          color={CHAPTER_STATUS_COLORS[chapterStatus]}
+          size="sm"
+        >
+          {status}
+        </Badge>
+      </Group>
+      {canRerun && (
+        <Button
+          variant="default"
+          size="xs"
+          loading={isRerunning}
+          onClick={onRerun}
+        >
+          Rerun
+        </Button>
+      )}
     </Group>
   );
 }
@@ -87,6 +129,17 @@ export const Route = createFileRoute("/_app/novels/$slug")({
         await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
         await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
         await queryClient.invalidateQueries({ queryKey: novelActivityQueryKey(slug) });
+      },
+    });
+
+    const { data: chapters } = useQuery({ ...getChaptersQueryOptions(slug) });
+
+    const rerunChapterMutation = useMutation({
+      mutationFn: (chapterNumber: number) => rerunChapter({ data: { slug, chapterNumber } }),
+      onSuccess: async () => {
+        await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
+        await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
+        await queryClient.invalidateQueries({ queryKey: ["novels", slug, "chapters"] });
       },
     });
 
@@ -274,6 +327,31 @@ export const Route = createFileRoute("/_app/novels/$slug")({
             startExtractionLabel={status === "ready" ? "Start extraction" : "Re-run extraction"}
             onStartExtraction={() => startExtractionMutation.mutate()}
           />
+        </Stack>
+
+        <Divider />
+
+        <Stack className="gap-3">
+          <SectionHeading>Chapters</SectionHeading>
+          {chapters?.length ? (
+            chapters.map((chapter) => (
+              <ChapterRow
+                key={chapter.id}
+                number={chapter.number}
+                status={chapter.status}
+                canRerun={
+                  (chapter.status === "translated" || chapter.status === "failed") &&
+                  !isParsing &&
+                  !isExtracting &&
+                  !isTranslating
+                }
+                isRerunning={rerunChapterMutation.isPending}
+                onRerun={() => rerunChapterMutation.mutate(chapter.number)}
+              />
+            ))
+          ) : (
+            <Text c="dimmed" className="text-sm">No chapters yet.</Text>
+          )}
         </Stack>
 
         <Divider />
