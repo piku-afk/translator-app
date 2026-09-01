@@ -9,6 +9,9 @@ export const ACTIVITY_LABELS: Record<ActivityAction, string> = {
   "extraction started": "Extraction started",
   "names extracted": "Names extracted",
   "extraction failed": "Extraction failed",
+  "translation started": "Translation started",
+  "translation completed": "Translation completed",
+  "translation failed": "Translation failed",
 };
 
 export const ACTIVITY_COLORS: Record<ActivityAction, string> = {
@@ -20,4 +23,7 @@ export const ACTIVITY_COLORS: Record<ActivityAction, string> = {
   "extraction started": "blue",
   "names extracted": "green",
   "extraction failed": "red",
+  "translation started": "blue",
+  "translation completed": "green",
+  "translation failed": "red",
 };

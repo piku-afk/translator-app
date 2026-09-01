@@ -10,6 +10,7 @@
   "vars": {
     "SESSION_MAX_AGE_SECONDS": "86400", // 1 week
     "EXTRACTION_MODEL_ID": "tencent/hy3",
+    "TRANSLATION_MODEL_ID": "tencent/hy3"
   },
   "d1_databases": [
     {
@@ -35,6 +36,10 @@
         "binding": "EXTRACTION_QUEUE",
         "queue": "translator-prod-extraction-queue",
       },
+      {
+        "binding": "TRANSLATION_QUEUE",
+        "queue": "translator-prod-translation-queue",
+      },
     ],
     "consumers": [
       {
@@ -51,6 +56,13 @@
         // on exhaustion the novel moves to `extraction failed`.
         "max_retries": 3,
         "dead_letter_queue": "translator-extraction-dlq",
+      },
+      {
+        "queue": "translator-prod-translation-queue",
+        // Must match TRANSLATION_MAX_RETRIES in src/lib/translator/service.ts:
+        // on exhaustion the novel moves to `translation failed`.
+        "max_retries": 3,
+        "dead_letter_queue": "translator-translation-dlq",
       },
     ],
   },
