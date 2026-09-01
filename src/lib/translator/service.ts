@@ -15,6 +15,7 @@ import type {
   ModelNotesDiff,
   ModelNotesEntry,
   ParseJobMessage,
+  RerunJobMessage,
   TranslationJobMessage,
   TranslatorPorts,
 } from "./ports";
@@ -58,6 +59,14 @@ export const TRANSLATION_MAX_RETRIES = 3;
  */
 export const TRANSLATION_CONCURRENCY = 4;
 
+/**
+ * Retries the rerun queue allows per message; must match the wrangler
+ * consumer's `max_retries`. The consumer treats a message on this attempt as
+ * exhausted: recording the chapter failure beats letting the message drop,
+ * which would strand the chapter in `translating`.
+ */
+export const RERUN_MAX_RETRIES = 3;
+
 export const NOVEL_NOT_FOUND_ERROR = "Novel not found";
 
 /** How the queue consumer should settle a message after runParseJob. */
@@ -69,10 +78,21 @@ export type ExtractionSettlement = { outcome: "ack" } | { outcome: "retry" };
 /** How the queue consumer should settle a message after runTranslationJob. */
 export type TranslationSettlement = { outcome: "ack" } | { outcome: "retry" };
 
+/** How the queue consumer should settle a message after runRerunJob. */
+export type RerunSettlement = { outcome: "ack" } | { outcome: "retry" };
+
 /** A novel plus the parse state the details page needs. */
 export interface NovelDetail {
   novel: Novel;
   chapter_count: number;
+}
+
+/** A single chapter's monitoring row: its number and stage state. */
+export interface ChapterSummary {
+  id: number;
+  number: number;
+  status: string;
+  updated_at: string;
 }
 
 /** A novel plus the number of parsed chapter rows, for list views. */
@@ -113,6 +133,12 @@ export interface TranslatorService {
   startTranslation(slug: string): Promise<Novel>;
   /** One translation-queue consumer invocation for a single message. */
   runTranslationJob(job: TranslationJobMessage, attempt: number): Promise<TranslationSettlement>;
+  /** Explicit, operator-only rerun of a single already-handled chapter. */
+  rerunChapter(slug: string, chapterNumber: number): Promise<Novel>;
+  /** One rerun-queue consumer invocation for a single chapter. */
+  runRerunJob(job: RerunJobMessage, attempt: number): Promise<RerunSettlement>;
+  /** The novel's per-chapter stage rows, ordered by chapter number. */
+  listChapters(slug: string): Promise<ChapterSummary[]>;
   /** The novel's current glossary; empty for a novel that has not been extracted. */
   listGlossary(slug: string): Promise<Glossary>;
   /** Most recent activity rows across all novels, newest first, capped at `limit`. */
@@ -684,6 +710,157 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       .execute();
   }
 
+  /** Per-chapter monitoring rows, ordered by chapter number. */
+  async function listChapters(slug: string): Promise<ChapterSummary[]> {
+    const novel = await findNovelBySlug(slug);
+    if (!novel) {
+      throw new Error(NOVEL_NOT_FOUND_ERROR);
+    }
+    return db
+      .selectFrom("chapters")
+      .select(["id", "number", "status", "updated_at"])
+      .where("novel_id", "=", novel.id)
+      .orderBy("number")
+      .execute();
+  }
+
+  /** Look up a chapter row by its novel and number. */
+  async function findChapter(
+    novelId: number,
+    number: number,
+  ): Promise<{ id: number; status: string } | undefined> {
+    return db
+      .selectFrom("chapters")
+      .select(["id", "status"])
+      .where("novel_id", "=", novelId)
+      .where("number", "=", number)
+      .executeTakeFirst();
+  }
+
+  async function rerunChapter(slug: string, chapterNumber: number): Promise<Novel> {
+    const novel = await findNovelBySlug(slug);
+    if (!novel) {
+      throw new Error(NOVEL_NOT_FOUND_ERROR);
+    }
+
+    // Rerun is forbidden during an active pass so concurrent writers can't
+    // interleave on the shared glossary (ADR-0001 bottleneck is sequential).
+    if (novel.status === "parsing" || novel.status === "extracting" || novel.status === "translating") {
+      throw new Error(
+        `Cannot rerun a chapter while the novel is "${novel.status}"; wait for the pass to finish`,
+      );
+    }
+
+    const chapter = await findChapter(novel.id, chapterNumber);
+    if (!chapter) {
+      throw new Error(
+        `Chapter ${chapterNumber} not found for novel "${novel.slug}"`,
+      );
+    }
+
+    // Only already-handled (terminal) stages can be rerun; never one mid-flight.
+    if (chapter.status !== "translated" && chapter.status !== "failed") {
+      throw new Error(
+        `Only translated or failed chapters can be rerun (currently "${chapter.status}")`,
+      );
+    }
+
+    // Flip to `translating` now so the rerun is visible; the consumer does the
+    // real work. If the enqueue fails, revert to the previous chapter status so
+    // the operator can press again.
+    const chapterBefore = chapter.status;
+    await db
+      .updateTable("chapters")
+      .set({ status: "translating", updated_at: new Date().toISOString() })
+      .where("id", "=", chapter.id)
+      .execute();
+
+    try {
+      await ports.rerunQueue.enqueue({ novelId: novel.id, chapterNumber });
+    } catch (error) {
+      await db
+        .updateTable("chapters")
+        .set({ status: chapterBefore, updated_at: new Date().toISOString() })
+        .where("id", "=", chapter.id)
+        .execute();
+      throw error;
+    }
+
+    return (await findNovelById(novel.id))!;
+  }
+
+  async function runRerunJob(
+    job: RerunJobMessage,
+    attempt: number,
+  ): Promise<RerunSettlement> {
+    const novel = await findNovelById(job.novelId);
+    if (!novel) {
+      return { outcome: "ack" }; // novel gone: nothing left to finalize
+    }
+
+    // A stale/duplicate message: a rerun that finds the chapter already
+    // re-translated elsewhere has nothing to do, so it acks rather than retries
+    // forever. The rerun is addressed by its operator-visible chapter number.
+    const chapter = await findChapter(novel.id, job.chapterNumber);
+    if (!chapter || chapter.status !== "translating") {
+      return { outcome: "ack" };
+    }
+
+    try {
+      await rerunChapterWork(novel, job.chapterNumber, chapter.id);
+      return { outcome: "ack" };
+    } catch (error) {
+      if (attempt >= RERUN_MAX_RETRIES) {
+        try {
+          await db
+            .updateTable("chapters")
+            .set({ status: "failed", updated_at: new Date().toISOString() })
+            .where("id", "=", chapter.id)
+            .execute();
+          return { outcome: "ack" };
+        } catch {
+          // Even recording the failure failed; let the queue retry the message.
+          return { outcome: "retry" };
+        }
+      }
+      return { outcome: "retry" };
+    }
+  }
+
+  /** Re-extract and re-translate a single chapter, then commit `translated`. */
+  async function rerunChapterWork(
+    novel: Novel,
+    chapterNumber: number,
+    chapterId: number,
+  ): Promise<void> {
+    const sourceText = await ports.storage.get(chapterFileKey(novel.slug, chapterNumber));
+    if (sourceText === null) {
+      throw new Error(
+        `Chapter file missing on storage for novel "${novel.slug}" chapter ${chapterNumber}`,
+      );
+    }
+
+    // Re-extract: consult the cumulative glossary, filtered to this chapter's
+    // text, and merge the model's notes diff idempotently.
+    const glossary = await loadGlossary(novel.id);
+    const filteredNotes = toModelNotes(filterNotesBySourceText(sourceText, glossary));
+    const { notesChanges } = await ports.model.getNotesDiff({ sourceText, filteredNotes });
+    const updated = applyGlossaryDiff(glossary, fromModelNotesDiff(notesChanges));
+    await persistGlossary(novel.id, glossary, updated);
+
+    // Re-translate: name pairs only (ADR-0002), write the markdown over the
+    // existing key, then commit the chapter status.
+    const namePairs = filterNamesBySourceText(sourceText, updated);
+    const { markdown } = await ports.model.translate({ sourceText, namePairs });
+    await ports.storage.put(translationFileKey(novel.slug, chapterNumber), markdown);
+    await db
+      .updateTable("chapters")
+      .set({ status: "translated", updated_at: new Date().toISOString() })
+      .where("id", "=", chapterId)
+      .execute();
+  }
+
+
   async function getNovelDetail(slug: string): Promise<NovelDetail | undefined> {
     const novel = await findNovelBySlug(slug);
     if (!novel) {
@@ -714,6 +891,9 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     startExtraction,
     runTranslationJob,
     startTranslation,
+    rerunChapter,
+    runRerunJob,
+    listChapters,
     getNovelDetail,
     findNovelBySlug,
     listRecentNovels,

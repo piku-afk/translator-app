@@ -4,6 +4,7 @@ import { createGatewayModel } from "./gateway-model";
 import type {
   ExtractionJobMessage,
   ParseJobMessage,
+  RerunJobMessage,
   TranslationJobMessage,
   TranslatorPorts,
 } from "./ports";
@@ -38,6 +39,11 @@ const ports: TranslatorPorts = {
   translationQueue: {
     async enqueue(job: TranslationJobMessage) {
       await env.TRANSLATION_QUEUE.send(job);
+    },
+  },
+  rerunQueue: {
+    async enqueue(job: RerunJobMessage) {
+      await env.RERUN_QUEUE.send(job);
     },
   },
   model: createGatewayModel({
