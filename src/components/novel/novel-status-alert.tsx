@@ -2,7 +2,7 @@ import { Alert } from "@mantine/core";
 import { STATUS_BADGE_COLORS } from "#/lib/novels/status-metadata";
 import type { NovelStatus } from "#/lib/novels/novels-core";
 
-export function NovelStatusAlert({
+function NovelStatusAlertOld({
   status,
   chapterCount,
   totalChapters,
@@ -21,37 +21,12 @@ export function NovelStatusAlert({
   isExtracting: boolean;
   isTranslating: boolean;
 }) {
-  const color = STATUS_BADGE_COLORS[
-    isParsing ? "parsing" : isExtracting ? "extracting" : isTranslating ? "translating" : status
-  ];
-  if (isParsing) {
-    return (
-      <Alert variant="light" color={color} title="Parsing in progress">
-        Chapters will appear here when the job completes.
-      </Alert>
-    );
-  }
-  if (isExtracting) {
-    return (
-      <Alert variant="light" color={color} title="Extraction in progress">
-        The glossary is being built chapter by chapter.
-      </Alert>
-    );
-  }
-  if (isTranslating) {
-    return (
-      <Alert variant="light" color={color} title="Translation in progress">
-        Each chapter is being translated in parallel.
-      </Alert>
-    );
-  }
+  const color =
+    STATUS_BADGE_COLORS[
+      isParsing ? "parsing" : isExtracting ? "extracting" : isTranslating ? "translating" : status
+    ];
+
   switch (status) {
-    case "draft":
-      return (
-        <Alert variant="light" color={color} title="Not parsed yet">
-          Start parsing to split the raw file into chapters.
-        </Alert>
-      );
     case "needs review":
       return (
         <Alert variant="light" color={color} title="Count mismatch">
@@ -69,42 +44,55 @@ export function NovelStatusAlert({
     case "extraction failed":
       return (
         <Alert variant="light" color={color} title="Extraction failed">
-          {lastError ?? "Extraction failed for an unknown reason"}. Re-trigger extraction to
-          resume from the last completed chapter.
+          {lastError ?? "Extraction failed for an unknown reason"}. Re-trigger extraction to resume
+          from the last completed chapter.
         </Alert>
       );
     case "translation failed":
       return (
-        <Alert variant="light" color={color} title="Translation failed">
+        <Alert variant="light" color={color} title="">
           {lastError ?? "Translation failed for an unknown reason"}. Re-trigger translation to
           resume from the last translated chapter.
         </Alert>
       );
-    case "names extracted":
-      return (
-        <Alert variant="light" color={color} title="Names extracted">
-          The glossary is complete. The novel is ready for translation.
-        </Alert>
-      );
-    case "extracting":
-      return (
-        <Alert variant="light" color={color} title="Extraction in progress">
-          The glossary is being built chapter by chapter.
-        </Alert>
-      );
-    case "ready":
-      return (
-        <Alert variant="light" color={color} title="Parsing Complete">
-          The novel is ready for translation.
-        </Alert>
-      );
-    default:
-      return (
-        <Alert variant="light" color={color} title="Nothing to do">
-          {status === "completed"
-            ? "All chapters are translated."
-            : "No action is available for this state yet."}
-        </Alert>
-      );
   }
+}
+
+const STATUS_ALERT_TITLE: Partial<Record<NovelStatus, string>> = {
+  draft: "Not parsed yet",
+  ready: "Parsing Complete",
+  completed: "Nothing to do",
+  "parsing failed": "Parsing failed",
+  extracting: "Extraction in progress",
+  translating: "Translation in progress",
+  "translation failed": "Translation failed",
+  "names extracted": "Names extracted",
+};
+
+const STATUS_ALERT_DESCRIPTION: Partial<Record<NovelStatus, string>> = {
+  draft: "Start parsing to split the raw file into chapters.",
+  ready: "The novel is ready for translation.",
+  completed: "All chapters are translated.",
+  parsing: "Chapters will appear here when the job completes.",
+  translating: "Each chapter is being translated in parallel.",
+  extracting: "The glossary is being built chapter by chapter.",
+  "names extracted": "The glossary is complete. The novel is ready for translation.",
+};
+
+export function NovelStatusAlert({
+  status,
+  lastError,
+}: {
+  status: NovelStatus;
+  lastError?: string | null;
+}) {
+  const title = STATUS_ALERT_TITLE[status];
+  const color = STATUS_BADGE_COLORS[status];
+  const description = lastError ?? STATUS_ALERT_DESCRIPTION[status];
+
+  return (
+    <Alert variant="light" color={color} title={title}>
+      {description}
+    </Alert>
+  );
 }

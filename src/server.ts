@@ -15,6 +15,8 @@ import { translatorService } from "./lib/translator/translator.server";
  */
 type CfRequest = Request & { cf?: { timezone?: string } };
 
+const PARSE_QUEUE_NAME = "translator-prod-parse-queue";
+
 /** The extraction queue name this worker consumes, matching wrangler.jsonc. */
 const EXTRACTION_QUEUE_NAME = "translator-prod-extraction-queue";
 
@@ -51,7 +53,11 @@ export default {
    * including a finalized novel on retry exhaustion) or asked for another
    * attempt ("retry").
    */
-  async queue(batch: MessageBatch<ParseJobMessage | ExtractionJobMessage | TranslationJobMessage | RerunJobMessage>): Promise<void> {
+  async queue(
+    batch: MessageBatch<
+      ParseJobMessage | ExtractionJobMessage | TranslationJobMessage | RerunJobMessage
+    >,
+  ): Promise<void> {
     if (batch.queue === EXTRACTION_QUEUE_NAME) {
       for (const message of batch.messages) {
         const settlement = await translatorService.runExtractionJob(
@@ -97,15 +103,17 @@ export default {
       return;
     }
 
-    for (const message of batch.messages) {
-      const settlement = await translatorService.runParseJob(
-        message.body as ParseJobMessage,
-        message.attempts,
-      );
-      if (settlement.outcome === "retry") {
-        message.retry();
-      } else {
-        message.ack();
+    if (batch.queue === PARSE_QUEUE_NAME) {
+      for (const message of batch.messages) {
+        const settlement = await translatorService.runParseJob(
+          message.body satisfies ParseJobMessage,
+          message.attempts,
+        );
+        if (settlement.outcome === "retry") {
+          message.retry();
+        } else {
+          message.ack();
+        }
       }
     }
   },

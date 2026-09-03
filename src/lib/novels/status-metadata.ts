@@ -5,7 +5,11 @@ export const LIFECYCLE_STEPS = ["parse", "extract", "translate", "complete"] as 
 export type LifecycleStep = (typeof LIFECYCLE_STEPS)[number];
 
 /** The failure/review states that collapse onto a step and surface as an alert. */
-export type LifecycleStepAlert = "needs review" | "parsing failed" | "extraction failed" | "translation failed";
+export type LifecycleStepAlert =
+  | "needs review"
+  | "parsing failed"
+  | "extraction failed"
+  | "translation failed";
 
 /** Where a novel sits in the coarse lifecycle, per the stepper mapping. */
 export interface LifecycleStepperState {
@@ -41,6 +45,26 @@ export function stepperStateFromStatus(status: NovelStatus): LifecycleStepperSta
       return { activeStep: 2, completed: [true, true, false, false], alert: alertFor(status) };
     case "completed":
       return { activeStep: 3, completed: [true, true, true, false], alert: null };
+  }
+}
+
+export function stepperStepFromStatus(status: NovelStatus): number {
+  switch (status) {
+    case "draft":
+    case "parsing":
+    case "parsing failed":
+    case "needs review":
+      return 0;
+    case "ready":
+    case "extracting":
+    case "extraction failed":
+      return 1;
+    case "names extracted":
+    case "translating":
+    case "translation failed":
+      return 2;
+    case "completed":
+      return 3;
   }
 }
 
