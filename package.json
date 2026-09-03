@@ -27,16 +27,16 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
-    "@mantine/core": "^9.5.2",
-    "@mantine/dropzone": "^9.5.2",
-    "@mantine/form": "^9.5.2",
-    "@mantine/hooks": "^9.5.2",
-    "@mantine/notifications": "^9.5.2",
+    "@mantine/core": "^9.6.0",
+    "@mantine/dropzone": "^9.6.0",
+    "@mantine/form": "^9.6.0",
+    "@mantine/hooks": "^9.6.0",
+    "@mantine/notifications": "^9.6.0",
     "@tanstack/react-query": "^5.102.8",
     "@tanstack/react-router": "^1.170.32",
     "@tanstack/react-router-ssr-query": "^1.167.2",
     "@tanstack/react-start": "^1.168.49",
-    "ai": "^7.0.83",
+    "ai": "^7.0.90",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -48,11 +48,12 @@
     "lucide-react": "^0.468.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-error-boundary": "^6.1.4",
     "tailwind-merge": "^3.6.0",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.54.1",
+    "@cloudflare/vite-plugin": "^1.54.3",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/devtools-vite": "^0.8.5",
     "@tanstack/react-devtools": "^0.10.12",
@@ -68,11 +69,11 @@
     "@types/react-dom": "^19.2.5",
     "@vitejs/plugin-react": "^6.1.1",
     "better-sqlite3": "^12.11.1",
-    "happy-dom": "^20.11.12",
+    "happy-dom": "^20.12.2",
     "jsonc-parser": "^3.3.1",
     "kysely-codegen": "^0.20.0",
     "oxfmt": "^0.64.0",
-    "oxlint": "^1.80.0",
+    "oxlint": "^1.81.0",
     "postcss": "^8.5.26",
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",
@@ -80,6 +81,6 @@
     "typescript": "^6.0.3",
     "vite": "^8.2.2",
     "vitest": "^4.1.11",
-    "wrangler": "^4.127.1"
+    "wrangler": "^4.128.0"
   }
 }

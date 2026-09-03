@@ -8,3 +8,10 @@
 body {
   font-family: "Geist Variable", sans-serif;
 }
+
+.mantine-Stepper-root {
+  span[data-progress="true"] {
+    border: 2px solid;
+    --stepper-color: black;
+  }
+}
