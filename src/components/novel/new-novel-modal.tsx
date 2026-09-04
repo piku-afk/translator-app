@@ -1,9 +1,7 @@
 import {
   Alert,
   Button,
-  CloseButton,
   Group,
-  Input,
   Modal,
   NumberInput,
   Select,
@@ -12,13 +10,11 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { Dropzone } from "@mantine/dropzone";
 import { schemaResolver, useForm } from "@mantine/form";
 import { notifications } from "@mantine/notifications";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Upload, X } from "lucide-react";
 import { z } from "zod";
-import { createNovel, novelsQueryKey, recentActivitiesQueryKey } from "#/lib/novels/novels";
+import { createNovel, novelsQueryKey } from "#/lib/novels/novels";
 import {
   NovelNameSchema,
   SOURCE_LANGUAGE_OPTIONS,
@@ -30,25 +26,16 @@ import { getErrorMessage } from "#/lib/utils";
 
 export const CREATE_NOVEL_MODAL = "create-novel";
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(1)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 type NewNovelFormValues = {
   name: string;
   total_chapters: number | undefined;
   source_language: SourceLanguage | "";
-  raw_text: File | null;
 };
 
 const FormSchema = z.object({
   name: NovelNameSchema,
   total_chapters: TotalChaptersSchema,
   source_language: SourceLanguageSchema,
-  raw_text: z.instanceof(File, { message: "Raw text file is required" }),
 });
 
 export function NewNovelModal({ onClose }: { onClose: () => void }) {
@@ -64,7 +51,6 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
         color: "green",
       });
       await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
-      await queryClient.invalidateQueries({ queryKey: recentActivitiesQueryKey });
     },
   });
 
@@ -76,7 +62,6 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
       name: "",
       total_chapters: undefined,
       source_language: "",
-      raw_text: null,
     },
     validate: schemaResolver(FormSchema),
     enhanceGetInputProps: () => ({ disabled: isPending }),
@@ -108,15 +93,12 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
       <form
         className="mt-6"
         onSubmit={form.onSubmit((values) => {
-          void values.raw_text?.text().then((raw_text) => {
-            createNovelMutation.mutate({
-              data: {
-                raw_text,
-                name: values.name,
-                total_chapters: values.total_chapters ?? 0,
-                source_language: values.source_language as SourceLanguage,
-              },
-            });
+          createNovelMutation.mutate({
+            data: {
+              name: values.name,
+              total_chapters: values.total_chapters ?? 0,
+              source_language: values.source_language as SourceLanguage,
+            },
           });
         })}
       >
@@ -137,7 +119,6 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
               classNames={{ label: "mb-2" }}
               data={SOURCE_LANGUAGE_OPTIONS}
               key={form.key("source_language")}
-
               {...form.getInputProps("source_language")}
             />
             <NumberInput
@@ -151,66 +132,6 @@ export function NewNovelModal({ onClose }: { onClose: () => void }) {
               {...form.getInputProps("total_chapters")}
             />
           </SimpleGrid>
-
-          <Input.Wrapper
-            label="Raw text file"
-            error={form.errors.raw_text}
-            classNames={{ label: "mb-2", error: "mt-1.25" }}
-          >
-            <Dropzone
-              multiple={false}
-              accept={["text/plain"]}
-              p={form.values.raw_text ? "sm" : "lg"}
-              disabled={isPending}
-              enablePointerEvents
-              onDrop={(files) => {
-                form.setFieldValue("raw_text", files[0] ?? null);
-                form.validateField("raw_text");
-              }}
-              onReject={() => form.setFieldError("raw_text", "Only .txt files are accepted")}
-            >
-              {form.values.raw_text ? (
-                <Group justify="space-between" wrap="nowrap" gap="sm">
-                  <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-                    <Check size={16} style={{ flexShrink: 0 }} aria-hidden />
-                    <Text size="sm" truncate style={{ minWidth: 0 }}>
-                      {form.values.raw_text.name}
-                    </Text>
-                  </Group>
-                  <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
-                    <Text size="sm" c="dimmed" visibleFrom="sm">
-                      {formatFileSize(form.values.raw_text.size)}
-                    </Text>
-                    <CloseButton
-                      size="sm"
-                      aria-label={`Remove ${form.values.raw_text.name}`}
-                      disabled={isPending}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        form.setFieldValue("raw_text", null);
-                        form.clearFieldError("raw_text");
-                      }}
-                    />
-                  </Group>
-                </Group>
-              ) : (
-                <Stack align="center" gap="xs">
-                  <Dropzone.Accept>
-                    <Upload size={24} aria-hidden />
-                  </Dropzone.Accept>
-                  <Dropzone.Reject>
-                    <X size={24} aria-hidden />
-                  </Dropzone.Reject>
-                  <Dropzone.Idle>
-                    <Upload size={24} aria-hidden />
-                  </Dropzone.Idle>
-                  <Text size="sm" c="dimmed">
-                    Drag your .txt file here or click to browse
-                  </Text>
-                </Stack>
-              )}
-            </Dropzone>
-          </Input.Wrapper>
 
           <Group className="mt-2 justify-end">
             <Button variant="default" disabled={isPending} onClick={onClose}>
