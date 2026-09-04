@@ -7,6 +7,12 @@ import type {
 } from "./lib/translator/ports";
 import { translatorService } from "./lib/translator/translator.server";
 
+// Re-export the per-novel translate Durable Object so Cloudflare registers it
+// against the `NOVEL_TRANSLATOR` binding (wrangler.jsonc), alongside the
+// legacy queue wiring below. The DO hosts the synchronous chapter-translate
+// flow of spec #45; the #47 server action calls it via `idFromName(slug)`.
+export { NovelTranslator } from "./do/novel-translator";
+
 /**
  * Cloudflare augments the incoming worker request with a `cf` object (see
  * `worker-configuration.d.ts`), exposing the client's IANA timezone via

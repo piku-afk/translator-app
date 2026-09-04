@@ -26,6 +26,23 @@
       "bucket_name": "translator-prod-novels",
     },
   ],
+  "durable_objects": {
+    "bindings": [
+      {
+        // One DO instance per novel (spec #45, decision #44), hosting the
+        // synchronous chapter-translate flow; called from the #47 server action.
+        "name": "NOVEL_TRANSLATOR",
+        "class_name": "NovelTranslator",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      // SQLite-backed storage class introduced with this worker's first deploy.
+      "tag": "v1",
+      "new_sqlite_classes": ["NovelTranslator"],
+    },
+  ],
   "queues": {
     "producers": [
       {

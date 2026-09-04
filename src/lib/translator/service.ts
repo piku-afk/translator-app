@@ -178,7 +178,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
   }
 
   async function createNovel(input: CreateNovelInput): Promise<Novel> {
-    const { name, total_chapters, source_language, raw_text } = input;
+    const { name, total_chapters, source_language } = input;
     const slug = toSlug(name);
 
     // Friendly pre-check for the common duplicate case; the DB unique
@@ -189,11 +189,6 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     }
 
     const timestamp = new Date().toISOString();
-
-    // Upload the raw file before persisting: a failed insert must never leave
-    // a DB record pointing at a missing file. An orphaned object (insert
-    // failed after upload) is harmless - nothing references it.
-    await ports.storage.put(rawFileKey(slug), raw_text);
 
     try {
       await db
@@ -222,9 +217,6 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       .orderBy("id", "desc")
       .limit(1)
       .executeTakeFirstOrThrow()) satisfies Novel;
-
-    // Record the committed transition only now, after the insert succeeded.
-    await recordActivity(created.id, created.name, "novel created");
 
     return created;
   }
@@ -304,7 +296,11 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       throw new Error(NOVEL_NOT_FOUND_ERROR);
     }
 
-    if (novel.status !== "draft" && novel.status !== "parsing failed" && novel.status !== "needs review") {
+    if (
+      novel.status !== "draft" &&
+      novel.status !== "parsing failed" &&
+      novel.status !== "needs review"
+    ) {
       throw new Error(
         `Only draft, parsing failed, or needs review novels can start parsing (currently "${novel.status}")`,
       );
@@ -678,7 +674,10 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
   }
 
   /** Translate a single chapter: read text, feed names, write markdown, commit. */
-  async function translateChapter(novel: Novel, chapter: { id: number; number: number }): Promise<void> {
+  async function translateChapter(
+    novel: Novel,
+    chapter: { id: number; number: number },
+  ): Promise<void> {
     // Dispatch-time bookkeeping: flip to `translating` just before the model
     // call so a failed message never strands a chapter permanently in `translating`.
     await db
@@ -745,7 +744,11 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
 
     // Rerun is forbidden during an active pass so concurrent writers can't
     // interleave on the shared glossary (ADR-0001 bottleneck is sequential).
-    if (novel.status === "parsing" || novel.status === "extracting" || novel.status === "translating") {
+    if (
+      novel.status === "parsing" ||
+      novel.status === "extracting" ||
+      novel.status === "translating"
+    ) {
       throw new Error(
         `Cannot rerun a chapter while the novel is "${novel.status}"; wait for the pass to finish`,
       );
@@ -753,9 +756,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
 
     const chapter = await findChapter(novel.id, chapterNumber);
     if (!chapter) {
-      throw new Error(
-        `Chapter ${chapterNumber} not found for novel "${novel.slug}"`,
-      );
+      throw new Error(`Chapter ${chapterNumber} not found for novel "${novel.slug}"`);
     }
 
     // Only already-handled (terminal) stages can be rerun; never one mid-flight.
@@ -789,10 +790,7 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
     return (await findNovelById(novel.id))!;
   }
 
-  async function runRerunJob(
-    job: RerunJobMessage,
-    attempt: number,
-  ): Promise<RerunSettlement> {
+  async function runRerunJob(job: RerunJobMessage, attempt: number): Promise<RerunSettlement> {
     const novel = await findNovelById(job.novelId);
     if (!novel) {
       return { outcome: "ack" }; // novel gone: nothing left to finalize
@@ -859,7 +857,6 @@ export function createTranslatorService(ports: TranslatorPorts): TranslatorServi
       .where("id", "=", chapterId)
       .execute();
   }
-
 
   async function getNovelDetail(slug: string): Promise<NovelDetail | undefined> {
     const novel = await findNovelBySlug(slug);
@@ -979,9 +976,7 @@ async function mapWithConcurrency<T>(
     }
   };
 
-  await Promise.all(
-    Array.from({ length: Math.min(concurrency, items.length) }, () => runOne()),
-  );
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => runOne()));
   if (errors.length > 0) throw errors[0];
 }
 
