@@ -1,78 +1,66 @@
-import { Badge, Button, Divider, Group, Stack, Text } from "@mantine/core";
-import {
-  noop,
-  useMutation,
-  usePrefetchQuery,
-  useQuery,
-  useQueryClient,
-  useQueryErrorResetBoundary,
-} from "@tanstack/react-query";
-import { Suspense } from "react";
+import { Button, Group, Modal, Stack, Text } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import { noop, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Suspense, useEffect, useState } from "react";
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { Download } from "lucide-react";
-import { ErrorBoundary } from "react-error-boundary";
-import { GlossarySection } from "#/components/novel/glossary-section";
-import { LifecycleSection, LifecycleSectionSkeleton } from "#/components/novel/lifecycle-section";
+import { Languages } from "lucide-react";
+import { ChaptersList } from "#/components/novel/chapters-list";
+import { GlossaryPanel } from "#/components/novel/glossary-panel";
 import { NovelHeader, NovelHeaderSkeleton } from "#/components/novel/novel-header";
-import { LifecycleStepper } from "#/components/novel/lifecycle-stepper";
-import { NovelHistory } from "#/components/novel/novel-history";
-import { SectionHeading } from "#/components/ui/section-heading";
+import { TranslateBox } from "#/components/novel/translate-box";
+import { TranslationPane } from "#/components/novel/translation-pane";
 import { getErrorMessage } from "#/lib/utils";
 import {
+  chaptersQueryKey,
+  chapterMarkdownQueryKey,
+  getChapterMarkdownQueryOptions,
   getChaptersQueryOptions,
-  getGlossaryQueryOptions,
   getNovelDetailQueryOptions,
-  novelActivityQueryKey,
-  novelDetailQueryKey,
-  novelsQueryKey,
-  rerunChapter,
-  startExtraction,
-  startParsing,
-  startTranslation,
+  glossaryQueryKey,
+  translateChapter,
 } from "#/lib/novels/novels";
-import { CHAPTER_STATUS_COLORS } from "#/lib/novels/status-metadata";
 import { NOVEL_NOT_FOUND_ERROR } from "#/lib/translator/service";
-import { type NovelStatus } from "#/lib/novels/novels-core";
-import { RetryErrorBoundary } from "#/components/ui/retry-error-boundary";
 
-function ChapterRow({
-  number,
-  status,
-  canRerun,
-  isRerunning,
-  onRerun,
+/** The "Re-translate & merge" confirmation (spec stories 11, 12, 13, 26). */
+function ConfirmReTranslateDialog({
+  chapterNumber,
+  onCancel,
+  onConfirm,
 }: {
-  number: number;
-  status: string;
-  canRerun: boolean;
-  isRerunning: boolean;
-  onRerun: () => void;
+  chapterNumber: number | null;
+  onCancel: () => void;
+  onConfirm: () => void;
 }) {
-  const chapterStatus = status as
-    | "queued"
-    | "names extracted"
-    | "translating"
-    | "translated"
-    | "failed";
   return (
-    <Group className="w-full justify-between gap-4 py-1">
-      <Group className="gap-3">
-        <Text className="w-8 text-sm font-medium">#{number}</Text>
-        <Badge
-          variant={CHAPTER_STATUS_COLORS[chapterStatus] ? "light" : "default"}
-          color={CHAPTER_STATUS_COLORS[chapterStatus]}
-          size="sm"
-        >
-          {status}
-        </Badge>
-      </Group>
-      {canRerun && (
-        <Button variant="default" size="xs" loading={isRerunning} onClick={onRerun}>
-          Rerun
-        </Button>
-      )}
-    </Group>
+    <Modal
+      opened={chapterNumber !== null}
+      onClose={onCancel}
+      title={`Chapter ${chapterNumber ?? ""} already exists`}
+      centered
+    >
+      <Stack gap="md">
+        <Text size="sm">
+          Re-translating will overwrite the existing English text for Chapter {chapterNumber}. New
+          or changed names will be merged into the glossary.
+        </Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} leftSection={<Languages className="size-4" />}>
+            Re-translate &amp; merge
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
+}
+
+/** Parse the chapter-number field: a positive integer, or null when invalid. */
+function parseChapterNumber(value: string): number | null {
+  if (!/^\d+$/.test(value.trim())) return null;
+  const parsed = Number(value.trim());
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 export const Route = createFileRoute("/_app/novels/$slug")({
@@ -85,185 +73,132 @@ export const Route = createFileRoute("/_app/novels/$slug")({
       }
       throw error;
     }
-    // // Best-effort warm-up of the first section's data (same pattern as the
-    // // home route): the Lifecycle section suspends on these while they resolve.
-    // context.queryClient.prefetchQuery(getChaptersQueryOptions(params.slug));
-    // context.queryClient.prefetchQuery(getGlossaryQueryOptions(params.slug));
   },
   component: function NovelDetailPage() {
     const { slug } = Route.useParams();
+    const queryClient = useQueryClient();
 
-    // const queryClient = useQueryClient();
+    // Translate-box state.
+    const [chapterNumber, setChapterNumber] = useState("");
+    const [pastedText, setPastedText] = useState("");
+    const [numberError, setNumberError] = useState<string | undefined>();
+    const [textError, setTextError] = useState<string | undefined>();
+    const [confirmNumber, setConfirmNumber] = useState<number | null>(null);
 
-    // // Keep the page live while a parse, extraction, or translation job runs:
-    // // poll until the novel leaves `parsing`/`extracting`/`translating` so the
-    // // transition to its terminal status shows up.
-    // const { data: detail } = useQuery({
-    //   ...getNovelDetailQueryOptions(slug),
-    //   refetchInterval: (query) =>
-    //     query.state.data?.novel.status === "parsing" ||
-    //     query.state.data?.novel.status === "extracting" ||
-    //     query.state.data?.novel.status === "translating"
-    //       ? 3000
-    //       : false,
-    // });
+    // Which chapter's markdown is shown in the output pane (Row 1 right).
+    const [activeChapter, setActiveChapter] = useState<number | null>(null);
 
-    // // A job is running (as opposed to a start-* mutation being pending): the
-    // // granular status has already flipped to the in-progress state.
-    // const jobRunning =
-    //   detail?.novel.status === "parsing" ||
-    //   detail?.novel.status === "extracting" ||
-    //   detail?.novel.status === "translating";
+    const { data: chapters } = useQuery(getChaptersQueryOptions(slug));
+    const translatedNumbers = (chapters ?? [])
+      .filter((chapter) => chapter.status === "translated")
+      .map((chapter) => chapter.number);
 
-    // const startParsingMutation = useMutation({
-    //   mutationFn: () => startParsing({ data: { slug } }),
-    //   onSuccess: async () => {
-    //     await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
-    //     await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
-    //     await queryClient.invalidateQueries({ queryKey: novelActivityQueryKey(slug) });
-    //   },
-    // });
+    // Default the output pane to the most recently translated chapter once the
+    // list loads, so the page opens with something to read.
+    useEffect(() => {
+      if (activeChapter === null && translatedNumbers.length > 0) {
+        setActiveChapter(Math.max(...translatedNumbers));
+      }
+    }, [activeChapter, translatedNumbers]);
 
-    // const startExtractionMutation = useMutation({
-    //   mutationFn: () => startExtraction({ data: { slug } }),
-    //   onSuccess: async () => {
-    //     await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
-    //     await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
-    //     await queryClient.invalidateQueries({ queryKey: novelActivityQueryKey(slug) });
-    //   },
-    // });
+    const { data: markdown, isFetching: markdownLoading } = useQuery({
+      ...getChapterMarkdownQueryOptions(slug, activeChapter ?? 1),
+      enabled: activeChapter !== null,
+    });
 
-    // const startTranslationMutation = useMutation({
-    //   mutationFn: () => startTranslation({ data: { slug } }),
-    //   onSuccess: async () => {
-    //     await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
-    //     await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
-    //     await queryClient.invalidateQueries({ queryKey: novelActivityQueryKey(slug) });
-    //   },
-    // });
+    const mutation = useMutation({
+      mutationFn: (input: { slug: string; chapterNumber: number; pastedText: string }) =>
+        translateChapter({ data: input }),
+      onSuccess: async ({ chapterNumber: translatedNumber }) => {
+        // The DO wrote glossary + markdown + chapter row; refresh both panels
+        // and point the output pane at the freshly translated chapter (#44).
+        await queryClient.invalidateQueries({ queryKey: glossaryQueryKey(slug) });
+        await queryClient.invalidateQueries({ queryKey: chaptersQueryKey(slug) });
+        await queryClient.invalidateQueries({
+          queryKey: chapterMarkdownQueryKey(slug, translatedNumber),
+        });
+        setActiveChapter(translatedNumber);
+        notifications.show({
+          title: "Chapter translated",
+          message: `Chapter ${translatedNumber} is ready.`,
+          color: "green",
+        });
+      },
+    });
 
-    // const { data: chapters } = useQuery({
-    //   ...getChaptersQueryOptions(slug),
-    //   // Live stepper progress while a job runs (translated count / names-
-    //   // extracted count feed the active step's progress bar).
-    //   refetchInterval: jobRunning ? 3000 : false,
-    // });
+    const actionError = mutation.isError ? getErrorMessage(mutation.error) : null;
 
-    // // The stepper's per-step counts reuse existing queries: parsed chapters
-    // // from the novel detail, glossary size from the glossary query, and the
-    // // extract/translate progress from the chapters query.
-    // const { data: glossary } = useQuery({ ...getGlossaryQueryOptions(slug) });
-    // const glossarySize = glossary?.length ?? 0;
-    // const chapterStatuses = chapters ?? [];
-    // const namesExtractedChapterCount = chapterStatuses.filter(
-    //   (chapter) => chapter.status === "names extracted",
-    // ).length;
-    // const translatedChapterCount = chapterStatuses.filter(
-    //   (chapter) => chapter.status === "translated",
-    // ).length;
+    /** Validate and either translate immediately or ask for confirmation. */
+    function handleTranslate() {
+      const parsed = parseChapterNumber(chapterNumber);
+      if (parsed === null) {
+        setNumberError("Enter a valid chapter number.");
+        return;
+      }
+      setNumberError(undefined);
+      if (pastedText.trim().length === 0) {
+        setTextError("Paste the chapter's text to translate.");
+        return;
+      }
+      setTextError(undefined);
 
-    // const rerunChapterMutation = useMutation({
-    //   mutationFn: (chapterNumber: number) => rerunChapter({ data: { slug, chapterNumber } }),
-    //   onSuccess: async () => {
-    //     await queryClient.invalidateQueries({ queryKey: novelDetailQueryKey(slug) });
-    //     await queryClient.invalidateQueries({ queryKey: novelsQueryKey });
-    //     await queryClient.invalidateQueries({ queryKey: ["novels", slug, "chapters"] });
-    //   },
-    // });
+      // Re-translating an existing chapter asks for confirmation first
+      // (stories 11-13, 26).
+      if (translatedNumbers.includes(parsed)) {
+        setConfirmNumber(parsed);
+        return;
+      }
+      mutation.mutate({ slug, chapterNumber: parsed, pastedText });
+    }
 
-    // if (!detail) {
-    //   return null; // the loader ensured the data
-    // }
-
-    // const { novel, chapter_count } = detail;
-    // const status = novel.status as NovelStatus;
-    // const canStartExtraction =
-    //   status === "ready" || status === "names extracted" || status === "extraction failed";
-    // const isParsing = status === "parsing" || startParsingMutation.isPending;
-    // const isExtracting = status === "extracting" || startExtractionMutation.isPending;
-    // const isTranslating = status === "translating" || startTranslationMutation.isPending;
+    function confirmReTranslate() {
+      if (confirmNumber === null) return;
+      const target = confirmNumber;
+      setConfirmNumber(null);
+      mutation.mutate({ slug, chapterNumber: target, pastedText });
+    }
 
     return (
-      <Stack className="gap-6">
-        <RetryErrorBoundary title="Failed to render novel header">
-          <Suspense fallback={<NovelHeaderSkeleton />}>
-            <NovelHeader slug={slug} />
-          </Suspense>
-        </RetryErrorBoundary>
+      <Stack className="gap-4">
+        <Suspense fallback={<NovelHeaderSkeleton />}>
+          <NovelHeader slug={slug} />
+        </Suspense>
 
-        <Divider />
-
-        <RetryErrorBoundary title="Failed to render novel lifecycle">
-          <Suspense fallback={<LifecycleSectionSkeleton />}>
-            <LifecycleSection slug={slug} />
-          </Suspense>
-        </RetryErrorBoundary>
-
-        <Divider />
-
-        {/* <Stack className="gap-6">
-          <SectionHeading>Actions</SectionHeading>
-
-          <Group className="gap-4">
-            <Button variant="default" disabled>
-              <Download className="size-4" />
-              Download raw file
-            </Button>
-            <Button variant="default" disabled>
-              Edit novel
-            </Button>
-            <Button variant="default" disabled>
-              Delete novel
-            </Button>
-          </Group>
-        </Stack> */}
-
-        {/* <Divider /> */}
-
-        {/* <Stack className="gap-3">
-          <SectionHeading>Glossary</SectionHeading>
-          <GlossarySection
-            slug={slug}
-            isExtracting={isExtracting}
-            canStartExtraction={canStartExtraction}
-            startExtractionLabel={status === "ready" ? "Start extraction" : "Re-run extraction"}
-            onStartExtraction={() => startExtractionMutation.mutate()}
+        {/* Row 1: translate box | translation output */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <TranslateBox
+            chapterNumber={chapterNumber}
+            onChapterNumberChange={setChapterNumber}
+            numberError={numberError}
+            pastedText={pastedText}
+            onPastedTextChange={setPastedText}
+            textError={textError}
+            actionError={actionError}
+            pending={mutation.isPending}
+            onTranslate={handleTranslate}
           />
-        </Stack> */}
+          <TranslationPane
+            chapterNumber={activeChapter}
+            markdown={markdown ?? null}
+            loading={markdownLoading}
+          />
+        </div>
 
-        {/* <Divider /> */}
+        {/* Row 2: chapters list | glossary */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <ChaptersList
+            chapters={chapters ?? []}
+            activeChapter={activeChapter}
+            onSelect={setActiveChapter}
+          />
+          <GlossaryPanel slug={slug} />
+        </div>
 
-        {/* <Stack className="gap-3">
-          <SectionHeading>Chapters</SectionHeading>
-          {chapters?.length ? (
-            chapters.map((chapter) => (
-              <ChapterRow
-                key={chapter.id}
-                number={chapter.number}
-                status={chapter.status}
-                canRerun={
-                  (chapter.status === "translated" || chapter.status === "failed") &&
-                  !isParsing &&
-                  !isExtracting &&
-                  !isTranslating
-                }
-                isRerunning={rerunChapterMutation.isPending}
-                onRerun={() => rerunChapterMutation.mutate(chapter.number)}
-              />
-            ))
-          ) : (
-            <Text c="dimmed" className="text-sm">
-              No chapters yet.
-            </Text>
-          )}
-        </Stack> */}
-
-        {/* <Divider /> */}
-
-        <Stack className="gap-6">
-          <SectionHeading>History</SectionHeading>
-          <NovelHistory slug={slug} isActive={isParsing || isExtracting || isTranslating} />
-        </Stack>
+        <ConfirmReTranslateDialog
+          chapterNumber={confirmNumber}
+          onCancel={() => setConfirmNumber(null)}
+          onConfirm={confirmReTranslate}
+        />
       </Stack>
     );
   },
