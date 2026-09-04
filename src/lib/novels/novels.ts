@@ -5,7 +5,6 @@ import { requireAuth } from "#/lib/auth/session.server";
 import type { Glossary } from "../translator/glossary";
 import {
   NOVEL_NOT_FOUND_ERROR,
-  type ActivityRow,
   type ChapterSummary,
   type NovelDetail,
   type NovelSummary,
@@ -22,8 +21,6 @@ export const chaptersQueryKey = (slug: string) => ["novels", slug, "chapters"] a
 /** Translated markdown for a single chapter (the output pane's data source). */
 export const chapterMarkdownQueryKey = (slug: string, chapterNumber: number) =>
   ["novels", slug, "chapters", chapterNumber, "markdown"] as const;
-export const recentActivitiesQueryKey = ["activities", "recent"] as const;
-export const novelActivityQueryKey = (slug: string) => ["novels", slug, "activity"] as const;
 
 const SlugSchema = z.object({ slug: z.string().min(1) });
 
@@ -33,15 +30,6 @@ const listNovels = createServerFn().handler(async (): Promise<NovelSummary[]> =>
 
 const listRecentNovels = createServerFn().handler(async (): Promise<NovelSummary[]> => {
   return translatorService.listRecentNovels();
-});
-
-// limit 5: the home page's Recent Activity feed stays scannable; the DB reader
-// caps it at read time. No per-function requireAuth - the _app layout guards the
-// page, mirroring listRecentNovels.
-const HOME_ACTIVITY_LIMIT = 5;
-
-const listRecentActivities = createServerFn().handler(async (): Promise<ActivityRow[]> => {
-  return translatorService.listRecentActivities(HOME_ACTIVITY_LIMIT);
 });
 
 export const createNovel = createServerFn({ method: "POST" })
@@ -61,27 +49,6 @@ const getNovelDetail = createServerFn()
     return detail;
   });
 
-export const startParsing = createServerFn({ method: "POST" })
-  .validator(SlugSchema)
-  .handler(async ({ data }): Promise<Novel> => {
-    await requireAuth();
-    return translatorService.startParsing(data.slug);
-  });
-
-export const startExtraction = createServerFn({ method: "POST" })
-  .validator(SlugSchema)
-  .handler(async ({ data }): Promise<Novel> => {
-    await requireAuth();
-    return translatorService.startExtraction(data.slug);
-  });
-
-export const startTranslation = createServerFn({ method: "POST" })
-  .validator(SlugSchema)
-  .handler(async ({ data }): Promise<Novel> => {
-    await requireAuth();
-    return translatorService.startTranslation(data.slug);
-  });
-
 export function getNovelsQueryOptions() {
   return { queryFn: () => listNovels(), queryKey: novelsQueryKey };
 }
@@ -89,18 +56,6 @@ export function getNovelsQueryOptions() {
 export function getRecentNovelsQueryOptions() {
   return { queryFn: () => listRecentNovels(), queryKey: recentNovelsQueryKey };
 }
-
-const RerunSchema = z.object({
-  slug: z.string().min(1),
-  chapterNumber: z.number().int().positive(),
-});
-
-export const rerunChapter = createServerFn({ method: "POST" })
-  .validator(RerunSchema)
-  .handler(async ({ data }): Promise<Novel> => {
-    await requireAuth();
-    return translatorService.rerunChapter(data.slug, data.chapterNumber);
-  });
 
 const TranslateChapterSchema = z.object({
   slug: z.string().min(1),
@@ -207,26 +162,4 @@ const getGlossary = createServerFn()
 
 export function getGlossaryQueryOptions(slug: string) {
   return { queryFn: () => getGlossary({ data: { slug } }), queryKey: glossaryQueryKey(slug) };
-}
-
-export function getRecentActivitiesQueryOptions() {
-  return { queryFn: () => listRecentActivities(), queryKey: recentActivitiesQueryKey };
-}
-
-const listActivityForNovel = createServerFn()
-  .validator(SlugSchema)
-  .handler(async ({ data }): Promise<ActivityRow[]> => {
-    await requireAuth();
-    const novel = await translatorService.findNovelBySlug(data.slug);
-    if (!novel) {
-      throw new Error(NOVEL_NOT_FOUND_ERROR);
-    }
-    return translatorService.listActivitiesForNovel(novel.id);
-  });
-
-export function getNovelActivityQueryOptions(slug: string) {
-  return {
-    queryFn: () => listActivityForNovel({ data: { slug } }),
-    queryKey: novelActivityQueryKey(slug),
-  };
 }
