@@ -5,7 +5,6 @@ const validInput: CreateNovelInput = {
   name: "The Beginning",
   total_chapters: 12,
   source_language: "ko",
-  raw_text: "1화.\n첫 문장입니다.",
 };
 
 describe("CreateNovelSchema", () => {
@@ -30,10 +29,6 @@ describe("CreateNovelSchema", () => {
       false,
     );
   });
-
-  it("rejects an empty raw text", () => {
-    expect(CreateNovelSchema.safeParse({ ...validInput, raw_text: "" }).success).toBe(false);
-  });
 });
 
 describe("toSlug", () => {
@@ -50,4 +45,3 @@ describe("rawFileKey", () => {
     expect(rawFileKey("the-beginning")).toBe("novels/the-beginning/raw");
   });
 });
-

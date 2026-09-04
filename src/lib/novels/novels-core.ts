@@ -53,7 +53,6 @@ export const CreateNovelSchema = z.object({
   name: NovelNameSchema,
   total_chapters: TotalChaptersSchema,
   source_language: SourceLanguageSchema,
-  raw_text: z.string().min(1, "Raw text file is required"),
 });
 
 export type CreateNovelInput = z.infer<typeof CreateNovelSchema>;

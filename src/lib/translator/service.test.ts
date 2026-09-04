@@ -138,7 +138,11 @@ function createFakeModel(): FakeModel {
     async translate({ sourceText, namePairs }) {
       calls.push({ chapterNumber: 0, fn: "translate", sourceText, namePairs });
       if (failing) throw new Error("model unavailable");
-      const chapter = sourceText.trim().split(/\s+/)[0].replace(/[^0-9]/g, "") || "0";
+      const chapter =
+        sourceText
+          .trim()
+          .split(/\s+/)[0]
+          .replace(/[^0-9]/g, "") || "0";
       return { markdown: `# Chapter ${chapter}\n\nTranslated ${namePairs.length} names.` };
     },
   };
@@ -168,7 +172,6 @@ const validInput: CreateNovelInput = {
   name: "The Beginning",
   total_chapters: 12,
   source_language: "ko",
-  raw_text: "1화.\n첫 문장입니다.",
 };
 
 /** Insert a novel row directly, bypassing the service, to arrange state. */
@@ -224,14 +227,16 @@ async function seedRaw(
 }
 
 describe("createNovel", () => {
-  it("creates a draft novel and uploads the raw text under its namespace", async () => {
+  it("creates a draft novel without uploading anything to storage", async () => {
     const { storage, service } = await makeService();
 
     const novel = await service.createNovel(validInput);
 
     expect(novel.status).toBe("draft");
     expect(novel.slug).toBe("the-beginning");
-    expect(storage.objects.get(rawFileKey("the-beginning"))).toBe(validInput.raw_text);
+    // The raw file is no longer part of novel creation: nothing is written to R2.
+    expect(storage.putCount()).toBe(0);
+    expect(storage.objects.size).toBe(0);
   });
 
   it("rejects a duplicate slug without uploading anything", async () => {
@@ -242,19 +247,14 @@ describe("createNovel", () => {
     expect(storage.putCount()).toBe(0);
   });
 
-  it("records a novel-created activity row once the insert succeeds", async () => {
+  it("writes no activity row when the insert succeeds", async () => {
     const { db, service } = await makeService();
 
     const novel = await service.createNovel(validInput);
 
     const rows = await db.selectFrom("activity").selectAll().execute();
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      novel_id: novel.id,
-      novel_name: "The Beginning",
-      action: "novel created",
-      detail: null,
-    });
+    expect(rows).toHaveLength(0);
+    expect(novel.status).toBe("draft");
   });
 });
 
@@ -630,7 +630,11 @@ describe("startExtraction", () => {
     // Reset to a start-eligible status, then make the enqueue fail and revert.
     await db
       .updateTable("novels")
-      .set({ status: "extraction failed", last_error: "boom", updated_at: new Date().toISOString() })
+      .set({
+        status: "extraction failed",
+        last_error: "boom",
+        updated_at: new Date().toISOString(),
+      })
       .where("id", "=", novel.id)
       .execute();
     extractionQueue.setFailing(true);
@@ -652,7 +656,10 @@ describe("runExtractionJob", () => {
     const novel = await seedNovel(db, { status: "extracting", total_chapters: numbers.length });
     for (const number of numbers) {
       await seedChapter(db, novel.id, number);
-      await storage.put(chapterFileKey(novel.slug, number), `${number}화.\n${number}번째 본문입니다.`);
+      await storage.put(
+        chapterFileKey(novel.slug, number),
+        `${number}화.\n${number}번째 본문입니다.`,
+      );
     }
     return novel;
   }
@@ -735,7 +742,10 @@ describe("runExtractionJob", () => {
     const novel = await seedExtractionNovel(db, storage, [1]);
     model.setFailing(true);
 
-    const settlement = await service.runExtractionJob({ novelId: novel.id }, EXTRACTION_MAX_RETRIES);
+    const settlement = await service.runExtractionJob(
+      { novelId: novel.id },
+      EXTRACTION_MAX_RETRIES,
+    );
 
     expect(settlement).toEqual({ outcome: "ack" });
     const updated = await refetchNovel(db, novel.id);
@@ -1047,7 +1057,10 @@ describe("rerunChapter", () => {
     for (const number of numbers) {
       await seedChapter(db, novel.id, number);
       await storage.put(chapterFileKey(novel.slug, number), `${number}화.\n본문 ${number} 입니다.`);
-      await storage.put(translationFileKey(novel.slug, number), `# Chapter ${number}\n\nOld markdown.`);
+      await storage.put(
+        translationFileKey(novel.slug, number),
+        `# Chapter ${number}\n\nOld markdown.`,
+      );
       await db
         .updateTable("chapters")
         .set({ status: "translated", updated_at: new Date().toISOString() })
@@ -1374,7 +1387,11 @@ describe("listRecentActivities", () => {
       action: "parsing ready",
       created_at: "2026-01-03T00:00:00.000Z",
     });
-    await seedActivity(db, { novel_id: first.id, action: "parsing failed", created_at: "2026-01-02T00:00:00.000Z" });
+    await seedActivity(db, {
+      novel_id: first.id,
+      action: "parsing failed",
+      created_at: "2026-01-02T00:00:00.000Z",
+    });
 
     const rows = await service.listRecentActivities(2);
 
